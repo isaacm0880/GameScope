@@ -141,3 +141,7 @@ GameScope is an independent community project and is not officially affiliated w
 ## License
 
 [MIT License](LICENSE).
+
+---
+
+> **AI disclosure:** GameScope was built with the assistance of AI.
