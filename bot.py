@@ -133,6 +133,8 @@ async def run_lookup(
         return
     try:
         await handler()
+    except ValueError as exc:
+        await send_error(interaction, str(exc), was_public=public)
     except UpstreamError as exc:
         log.warning("%s failed: %s", label, exc)
         await send_error(interaction, describe_upstream(exc), was_public=public)
@@ -326,7 +328,7 @@ def steam_buttons_view(appid: int, opts: dict | None = None) -> discord.ui.View:
 class ProtonDBBot(commands.Bot):
     async def setup_hook(self) -> None:
         await services.start()
-        self.add_dynamic_items(RequirementsButton, ReviewsButton)
+        self.add_dynamic_items(RequirementsButton, ReviewsButton, GameViewSelect, GameNewsButton)
         await self.sync_slash_commands()
 
     async def sync_slash_commands(self) -> None:
@@ -534,149 +536,147 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 
 # ---------------------------------------------------------------------------
-# /protondb and /protondbid
+# /game: one command, selectable ProtonDB / Steam views, private news button
 # ---------------------------------------------------------------------------
-async def show_protondb(interaction: discord.Interaction, resolved: ResolvedGame) -> None:
-    appid = resolved.appid
-    (app, _app_exc), (summary, summary_exc), reports = await asyncio.gather(
-        capture(services.steam_app(appid)),
-        capture(services.protondb_summary(appid)),
-        services.protondb_reports(appid, limit=options(interaction)["report_count"]),
-    )
-    if app is None and _app_exc is None and summary is None and summary_exc is None:
-        await send_error(
-            interaction,
-            f"I couldn't find Steam or ProtonDB data for App ID `{appid}`.",
-            title="Game not found",
-            was_public=True,
+async def build_game_embed(interaction: discord.Interaction, appid: int, view_name: str):
+    opts = options(interaction)
+    if view_name == "Steam":
+        (app, app_exc), (summary, summary_exc), (updates, _) = await asyncio.gather(
+            capture(services.steam_app(appid)),
+            capture(services.review_summary(appid)),
+            capture(services.news(appid, count=100)),
         )
-        return
-    name = (app.name if app else None) or resolved.name or services.known_name(appid) or f"Steam App {appid}"
-    embed = embeds.build_protondb_embed(appid, name, summary, short_reason(summary_exc), reports, app)
-    await send_embed(interaction, customise(interaction, embed, appid), view=proton_buttons_view(appid, options(interaction)))
-
-
-@bot.tree.command(name="protondb", description="Check a game's Linux compatibility on ProtonDB.")
-@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID", visibility="Public or private response")
-@app_commands.choices(visibility=VISIBILITY_CHOICES)
-@app_commands.autocomplete(game=game_autocomplete)
-async def protondb_command(
-    interaction: discord.Interaction,
-    game: str | None = None,
-    appid: app_commands.Range[int, 1, 999999999] | None = None,
-    visibility: str | None = None,
-) -> None:
-    async def handler() -> None:
-        resolved = await resolve_input(interaction, game, appid)
-        if resolved:
-            await show_protondb(interaction, resolved)
-
-    await run_lookup(interaction, f"/protondb game={game!r} appid={appid}", handler, public=public_response(interaction, visibility))
-
-
-# ---------------------------------------------------------------------------
-# /steam
-# ---------------------------------------------------------------------------
-async def show_steam(interaction: discord.Interaction, resolved: ResolvedGame) -> None:
-    (app, app_exc), (summary, summary_exc), (updates, update_exc) = await asyncio.gather(
-        capture(services.steam_app(resolved.appid)),
-        capture(services.review_summary(resolved.appid)),
-        capture(services.news(resolved.appid, count=100)),
-    )
-    if app_exc is not None:
-        raise app_exc
-    if app is None:
-        await send_error(
-            interaction,
-            f"Steam has no store data for App ID `{resolved.appid}`. It may be delisted, "
-            "region-restricted or not a store item.",
-            title="No Steam data",
-            was_public=True,
-        )
-        return
-    embed = embeds.build_steam_embed(app, summary, reviews_unavailable=summary_exc is not None)
-    latest = next((item for item in (updates or []) if is_game_update(item)), None)
-    if latest:
-        link = embeds.news_link(latest, app.appid)
-        title = embeds.safe_text(latest.title)
-        date = f"<t:{latest.date}:D>" if latest.date else "Date unknown"
-        embed.add_field(name="Latest game update", value=f"**{title}** · {date}" + (f"\n[Read patch notes]({link})" if link else ""), inline=False)
+        if app_exc:
+            raise app_exc
+        if app is None:
+            raise ValueError("Steam has no store information for this game.")
+        embed = embeds.build_steam_embed(app, summary, reviews_unavailable=summary_exc is not None)
+        latest = next((item for item in (updates or []) if is_game_update(item)), None)
+        if latest:
+            link = embeds.news_link(latest, appid)
+            date = f"<t:{latest.date}:D>" if latest.date else "Date unknown"
+            embed.add_field(name="Latest game update", value=f"**{embeds.safe_text(latest.title)}** · {date}" +
+                            (f"\\n[Read patch notes]({link})" if link else ""), inline=False)
+        else:
+            embed.add_field(name="Latest game update", value="No clearly labelled game update found in recent Steam news.", inline=False)
     else:
-        embed.add_field(name="Latest game update", value="No clearly labelled game update found in the latest Steam news.", inline=False)
-    await send_embed(interaction, customise(interaction, embed, app.appid), view=steam_buttons_view(app.appid, options(interaction)))
+        (app, app_exc), (summary, summary_exc), reports = await asyncio.gather(
+            capture(services.steam_app(appid)),
+            capture(services.protondb_summary(appid)),
+            services.protondb_reports(appid, limit=opts["report_count"]),
+        )
+        if app is None and app_exc is None and summary is None and summary_exc is None:
+            raise ValueError("No Steam or ProtonDB information was found for this game.")
+        name = (app.name if app else None) or services.known_name(appid) or f"Steam App {appid}"
+        embed = embeds.build_protondb_embed(appid, name, summary, short_reason(summary_exc), reports, app)
+    return customise(interaction, embed, appid)
 
 
 def is_english_news(item) -> bool:
-    """Reject clearly non-English headlines without rejecting translated body text."""
     import re
-    title = item.title or ""
-    # Most Steam news is multilingual; only exclude unmistakable non-Latin headlines.
-    if re.search("[\\u0400-\\u052f\\u0600-\\u06ff\\u4e00-\\u9fff\\u3040-\\u30ff\\uac00-\\ud7af]", title):
-        return False
-    return True
+    return not bool(re.search("[\\u0400-\\u052f\\u0600-\\u06ff\\u4e00-\\u9fff\\u3040-\\u30ff\\uac00-\\ud7af]", item.title or ""))
 
 
 def is_game_update(item) -> bool:
-    """Find update posts; do not assume all developers use one Steam feed name."""
     import re
-    if not is_english_news(item):
-        return False
-    title = item.title or ""
-    return bool(re.search(
-        r"patch\\s*notes?|hot\\s*fix|updates?|changelog|release notes|"
-        r"version\\s*[0-9]|v[0-9]+(?:\\.[0-9]+)+|maintenance|bug\\s*fix|"
-        r"new\\s*patch|game\\s*fixes|technical\\s*update",
-        title, re.I,
+    return is_english_news(item) and bool(re.search(
+        r"patch\\s*notes?|hot\\s*fix|updates?|changelog|release notes|version\\s*[0-9]|"
+        r"v[0-9]+(?:\\.[0-9]+)+|maintenance|bug\\s*fix|game\\s*fixes",
+        item.title or "", re.I,
     ))
 
 
-@bot.tree.command(name="steam", description="Show Steam store info: price, reviews, release date and more.")
-@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID", visibility="Public or private response")
-@app_commands.choices(visibility=VISIBILITY_CHOICES)
-@app_commands.autocomplete(game=game_autocomplete)
-async def steam_command(
-    interaction: discord.Interaction,
-    game: str | None = None,
-    appid: app_commands.Range[int, 1, 999999999] | None = None,
-    visibility: str | None = None,
-) -> None:
-    async def handler() -> None:
-        resolved = await resolve_input(interaction, game, appid)
-        if resolved:
-            await show_steam(interaction, resolved)
-
-    await run_lookup(interaction, f"/steam game={game!r} appid={appid}", handler, public=public_response(interaction, visibility))
+async def send_game_news(interaction: discord.Interaction, appid: int):
+    (app, _), (items, error) = await asyncio.gather(
+        capture(services.steam_app(appid)),
+        capture(services.news(appid, count=max(50, options(interaction)["news_count"] * 10))),
+    )
+    if error:
+        raise error
+    name = (app.name if app else None) or services.known_name(appid) or f"Steam App {appid}"
+    english = [item for item in (items or []) if is_english_news(item)]
+    await send_embed(interaction, embeds.build_news_embed(name, appid, english[:options(interaction)["news_count"]]), ephemeral=True)
 
 
-# ---------------------------------------------------------------------------
-# /news
-# ---------------------------------------------------------------------------
-@bot.tree.command(name="news", description="Show recent Steam announcements and news for a game.")
-@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID", visibility="Public or private response")
-@app_commands.choices(visibility=VISIBILITY_CHOICES)
-@app_commands.autocomplete(game=game_autocomplete)
-async def news_command(
-    interaction: discord.Interaction,
-    game: str | None = None,
-    appid: app_commands.Range[int, 1, 999999999] | None = None,
-    visibility: str | None = None,
-) -> None:
-    async def handler() -> None:
-        resolved = await resolve_input(interaction, game, appid)
-        if not resolved:
-            return
-        (app, _app_exc), (items, news_exc) = await asyncio.gather(
-            capture(services.steam_app(resolved.appid)),
-            capture(services.news(resolved.appid, count=max(50, options(interaction)["news_count"] * 10))),
+class GameViewSelect(discord.ui.DynamicItem[discord.ui.Select], template=r"game:view:(?P<appid>[0-9]+)"):
+    def __init__(self, appid: int):
+        select = discord.ui.Select(
+            placeholder="Choose game view",
+            options=[
+                discord.SelectOption(label="ProtonDB", value="ProtonDB", description="Linux compatibility and reports"),
+                discord.SelectOption(label="Steam", value="Steam", description="Store information and latest update"),
+            ],
+            custom_id=f"game:view:{appid}",
+            min_values=1, max_values=1,
         )
-        if news_exc is not None:
-            raise news_exc
-        name = (app.name if app else None) or resolved.name or services.known_name(resolved.appid) or f"Steam App {resolved.appid}"
-        english = [item for item in (items or []) if is_english_news(item)]
-        selected = english[:options(interaction)["news_count"]]
-        await send_embed(interaction, embeds.build_news_embed(name, resolved.appid, selected))
+        super().__init__(select)
+        self.appid = appid
 
-    await run_lookup(interaction, f"/news game={game!r} appid={appid}", handler, public=public_response(interaction, visibility))
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match, /):
+        return cls(int(match["appid"]))
+
+    async def callback(self, interaction: discord.Interaction):
+        selected = self.item.values[0]
+        if not await safe_defer(interaction):
+            return
+        try:
+            embed = await build_game_embed(interaction, self.appid, selected)
+            await interaction.edit_original_response(embed=embed, view=game_view(self.appid, selected, options(interaction)))
+        except Exception:
+            log.exception("Failed switching game view")
+            await interaction.followup.send("Couldn't switch the game view. Check the bot logs.", ephemeral=True)
+
+
+class GameNewsButton(discord.ui.DynamicItem[discord.ui.Button], template=r"game:news:(?P<appid>[0-9]+)"):
+    def __init__(self, appid: int):
+        super().__init__(discord.ui.Button(label="News", style=discord.ButtonStyle.secondary, custom_id=f"game:news:{appid}"))
+        self.appid = appid
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match, /):
+        return cls(int(match["appid"]))
+
+    async def callback(self, interaction):
+        await run_lookup(interaction, f"News button {self.appid}", lambda: send_game_news(interaction, self.appid), public=False)
+
+
+def game_view(appid: int, selected: str, opts: dict) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    view.add_item(GameViewSelect(appid))
+    if selected == "Steam":
+        view.add_item(RequirementsButton(appid))
+        view.add_item(ReviewsButton(appid))
+    view.add_item(GameNewsButton(appid))
+    add_links(view, appid, proton=selected != "Steam", opts=opts)
+    return view
+
+
+@bot.tree.command(name="game", description="Look up a game on ProtonDB or Steam.")
+@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID", view="Choose ProtonDB or Steam", visibility="Public or private response")
+@app_commands.choices(
+    view=[
+        app_commands.Choice(name="ProtonDB", value="ProtonDB"),
+        app_commands.Choice(name="Steam", value="Steam"),
+    ],
+    visibility=VISIBILITY_CHOICES,
+)
+@app_commands.autocomplete(game=game_autocomplete)
+async def game_command(
+    interaction: discord.Interaction,
+    game: str | None = None,
+    appid: app_commands.Range[int, 1, 999999999] | None = None,
+    view: str | None = None,
+    visibility: str | None = None,
+):
+    async def handler():
+        resolved = await resolve_input(interaction, game, appid)
+        if resolved is None:
+            return
+        chosen = view or "ProtonDB"
+        embed = await build_game_embed(interaction, resolved.appid, chosen)
+        await send_embed(interaction, embed, view=game_view(resolved.appid, chosen, options(interaction)))
+    await run_lookup(interaction, f"/game game={game!r} appid={appid}", handler, public=public_response(interaction, visibility))
 
 
 
