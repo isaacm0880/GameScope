@@ -139,7 +139,7 @@ Issues and pull requests are welcome. Include reproduction steps, the relevant S
 - [PCGamingWiki](https://www.pcgamingwiki.com/)
 - [discord.py](https://discordpy.readthedocs.io/)
 
-GameScope is an independent community project and is not officially affiliated with Valve, Steam, ProtonDB or PCGamingWiki.
+GameScope is an independent project and is not officially affiliated with Valve, Steam, ProtonDB or PCGamingWiki.
 
 ## License
 
