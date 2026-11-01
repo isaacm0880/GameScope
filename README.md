@@ -133,14 +133,13 @@ Issues and pull requests are welcome. Include reproduction steps, the relevant S
 
 ## Credits
 
-- [Playden PS5](https://github.com/leolobato/playden-ps5)
 - [Steam](https://store.steampowered.com/)
 - [ProtonDB](https://www.protondb.com/)
 - [SteamDB](https://steamdb.info/)
 - [PCGamingWiki](https://www.pcgamingwiki.com/)
 - [discord.py](https://discordpy.readthedocs.io/)
 
-GameScope is an independent community project and is not officially affiliated with Valve, Steam or ProtonDB.
+GameScope is an independent community project and is not officially affiliated with Valve, Steam, ProtonDB or PCGamingWiki.
 
 ## License
 
