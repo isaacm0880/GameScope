@@ -1,121 +1,143 @@
-# ProtonDB Discord Bot
+# GameScope
 
-A Discord bot for checking **Linux/Proton game compatibility** and looking up useful **Steam game information** without leaving Discord.
+A Discord bot for **Steam game information, ProtonDB compatibility, reviews, requirements, and news**, with interactive views and configurable server settings.
 
-Originally created for the [Playden PS5 project](https://github.com/leolobato/playden-ps5) community to make it easier to check Proton compatibility before trying Steam games through Playden. It also includes a few quality-of-life features for Steam game information.
+Originally built for the [Playden PS5](https://github.com/leolobato/playden-ps5) community. [Join the Playden Discord](https://discord.gg/wd8UjExpPA).
 
-**[Join the Playden Discord](https://discord.gg/wd8UjExpPA)**
-
-> **Note:** ProtonDB reports reflect community experiences running games through Proton. They do **not** guarantee that a game will run on Playden or on a PS5. Hardware, drivers, runtime versions, and other platform differences can affect compatibility.
+> **Compatibility disclaimer:** ProtonDB reports describe community experiences with Proton on Linux. They do **not** guarantee that a game will run on Playden, PS5, or every Linux device.
 
 ## Features
 
-- Search for Steam games using slash-command autocomplete.
-- Check ProtonDB compatibility tiers and community reports.
-- View Steam store details, current regional pricing and Steam user-review ratings.
-- Open separate **Requirements** and **Reviews** embeds using buttons.
-- Read recent Steam game announcements.
-- Look up games by Steam App ID.
-- Docker-based deployment with configurable caching and Steam region/language.
-- Consistent orange (`#B45D1F`) embeds.
+- Search Steam games by name (with autocomplete) or numeric Steam App ID.
+- Switch between **ProtonDB** and **Steam** views using the dropdown on a game result.
+- ProtonDB compatibility tier and recent community reports.
+- Steam store information, regional pricing, release information and review ratings.
+- **Requirements** and **Reviews** buttons for detailed Steam information.
+- **News** button in the Steam view for recent announcements, plus the latest identifiable game update in the Steam embed.
+- External links to Steam, ProtonDB, SteamDB and PCGamingWiki (the latter two can be disabled per server).
+- Public or private results, configurable embed colour and content counts.
+- Custom Discord bot presence (status, activity type and text), saved across restarts. The default is **Watching /game**.
+- Administrator-only settings by default; administrators can grant additional roles access.
+- SQLite persistence using a Docker volume.
 
 ## Commands
 
-| Command | Description |
+### `/game`
+
+Look up a game by name or Steam App ID.
+
+| Option | Required | Description |
+| --- | --- | --- |
+| `game` | Yes | Steam game name or numeric App ID |
+| `view` | No | `ProtonDB` (default) or `Steam` |
+| `visibility` | No | `Public` or `Private`; defaults to the server setting |
+
+Examples:
+
+```text
+/game game:Cyberpunk 2077
+/game game:Cyberpunk 2077 view:Steam
+/game game:1091500
+/game game:Portal 2 visibility:Private
+```
+
+Use the dropdown on the result to switch views without issuing another command. The Steam view provides **Requirements**, **Reviews**, and **News** buttons. News opens privately.
+
+The previous `/steam`, `/protondb`, and `/news` slash commands have been replaced by `/game`.
+
+### `/settings`
+
+Configure the bot through an interactive Discord menu.
+
+| Section | Options |
 | --- | --- |
-| `/protondb` | Search a game and view its ProtonDB compatibility tier, community reports and Linux-focused troubleshooting. |
-| `/protondbid` | Look up ProtonDB compatibility using a Steam App ID. |
-| `/steam` | Show Steam game details, rating, price and links. Use **Requirements** and **Reviews** buttons for additional information. |
-| `/news` | Show recent Steam announcements for a game. |
+| Appearance | Default result visibility and embed colour |
+| Game information | ProtonDB report count, Steam news count, SteamDB and PCGamingWiki buttons |
+| Access | Additional settings roles and allowed channels |
+| Bot presence | Online / Idle / Do Not Disturb / Invisible; Playing / Watching / Listening / Competing; custom activity text; enable or disable activity |
 
-Game-name commands support autocomplete. Some data may be unavailable if Steam or ProtonDB changes an endpoint, limits requests, or has no information for the selected game.
+**Permissions:** Users with Discord's **Administrator** permission can access settings by default. Administrators can add up to ten additional roles to grant settings access; clearing the role selection restores administrator-only access. Only administrators can grant roles settings access.
 
-## Invite or self-host
+**Presence is global:** Unlike server-specific settings, changing the bot's presence affects its appearance in every server where the same bot account is installed. Users authorised to access settings can change it.
 
-The bot was created for the Playden community, but you can also host your own instance using Docker.
+## Self-hosting with Docker
 
 ### Requirements
 
-- Docker Engine and Docker Compose plugin
-- A Discord application with a bot token
-- Outbound internet access to Discord, Steam and ProtonDB
+- Docker Engine and the Docker Compose plugin
+- A Discord application and bot token
+- Outbound access to Discord, Steam and ProtonDB
 
-### Setup
+### 1. Clone
 
-1. Clone the repository:
+```bash
+git clone https://github.com/isaacm0880/GameScope.git
+cd GameScope
+```
 
-   ```bash
-   git clone https://github.com/isaacm0880/ProtonDB-Discord-Bot.git
-   cd ProtonDB-Discord-Bot
-   ```
+### 2. Configure environment
 
-2. Create `.env` in the project directory:
+Create a `.env` file in the repository directory:
 
-   ```env
-   DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
-   DISCORD_GUILD_ID=
-   CACHE_SECONDS=900
-   LOG_LEVEL=INFO
-   STEAM_COUNTRY=gb
-   STEAM_LANGUAGE=english
-   ```
+```dotenv
+DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
+DISCORD_GUILD_ID=
+STEAM_COUNTRY=gb
+STEAM_LANGUAGE=english
+CACHE_SECONDS=900
+LOG_LEVEL=INFO
+```
 
-   `DISCORD_GUILD_ID` is optional. Set it to a test server ID for faster slash-command registration during development; leave it empty for global commands. `STEAM_COUNTRY` defaults to `gb` and `STEAM_LANGUAGE` defaults to `english`. You can also set `HTTP_TIMEOUT_SECONDS` (default `12`).
+`DISCORD_GUILD_ID` is optional: specify a test server ID for faster development command sync, or leave blank for global commands. `HTTP_TIMEOUT_SECONDS` is also supported (default: `12`).
 
-3. In the [Discord Developer Portal](https://discord.com/developers/applications), select your application, enable the bot, and generate an invite link under **Installation** with the following settings:
+**No owner ID or presence configuration is required in `.env`.** Presence and permissions are managed through `/settings`.
 
-   **Scopes:**
-   - `bot`
-   - `applications.commands`
+### 3. Invite the bot
 
-   **Bot Permissions:**
-   - View Channels
-   - Send Messages
-   - Embed Links
+In the [Discord Developer Portal](https://discord.com/developers/applications), create or open your application and invite it with the `bot` and `applications.commands` scopes.
 
-   The bot uses slash commands and interactive buttons, so it does **not** require Administrator permissions or privileged intents such as Message Content.
+Recommended bot permissions: **View Channels**, **Send Messages**, and **Embed Links**. The bot does not need the Administrator permission or the Message Content privileged intent.
 
-   Once configured, use the generated invite link to add the bot to your Discord server.
+### 4. Start
 
-4. Start the bot:
-
-   ```bash
-   docker compose up -d --build
-   ```
-
-5. View logs:
-
-   ```bash
-   docker compose logs -f
-   ```
+```bash
+docker compose up -d --build
+docker compose logs -f
+```
 
 ### Updating
 
 ```bash
-git pull
+git pull --ff-only
 docker compose up -d --build
 ```
 
-### Troubleshooting
+The named Docker volume stores SQLite settings across container rebuilds. Do not remove the volume if you want to keep your configuration.
 
-- **Bot offline:** Check the container logs and verify `DISCORD_TOKEN`.
-- **Slash commands missing:** Check the application's invite scopes. Global command updates can take time to appear.
-- **Missing game data:** Some Steam titles have no public price, requirements, reviews or announcements. ProtonDB individual-report retrieval relies on public data that can change.
-- **Unexpected errors:** Review `docker compose logs -f` and open a GitHub issue with non-sensitive logs and steps to reproduce.
+## Troubleshooting
+
+- **Bot offline or restarting:** Run `docker compose ps` and `docker compose logs --tail=100` to inspect startup errors.
+- **Slash commands missing:** Confirm the invite scopes and guild ID. Global command changes can take time to appear.
+- **Settings unavailable:** Only server administrators and roles granted settings access can open `/settings`.
+- **Presence changes fail:** Check container logs. Presence updates require an active Discord gateway connection.
+- **Missing game information or updates:** Steam and ProtonDB may have incomplete data or rate limits. The update detector is heuristic and may not identify every patch.
+- **SQLite permission errors:** Ensure the Docker volume mounted at `/data` is writable by the container user.
 
 ## Contributing
 
-Issues and pull requests are welcome. When reporting a bug, include the command, Steam App ID, expected behaviour, actual behaviour and relevant logs. **Remove tokens, credentials and other sensitive information before posting logs.**
+Issues and pull requests are welcome. Include reproduction steps, the relevant Steam App ID and sanitized logs. **Never publish your bot token or other credentials.**
 
-## Credits and acknowledgements
+## Credits
 
-- [Playden PS5](https://github.com/leolobato/playden-ps5) — the community this bot was originally built to support.
-- [ProtonDB](https://www.protondb.com/) — community Proton compatibility reports.
-- [Steam](https://store.steampowered.com/) — game information, reviews, pricing and news.
-- [discord.py](https://discordpy.readthedocs.io/) — Discord bot framework.
+- [Playden PS5](https://github.com/leolobato/playden-ps5)
+- [Steam](https://store.steampowered.com/)
+- [ProtonDB](https://www.protondb.com/)
+- [SteamDB](https://steamdb.info/)
+- [PCGamingWiki](https://www.pcgamingwiki.com/)
+- [discord.py](https://discordpy.readthedocs.io/)
 
-This is an independent community project and is not officially affiliated with Valve, Steam or ProtonDB.
+GameScope is an independent community project and is not officially affiliated with Valve, Steam or ProtonDB.
 
 ## License
 
-Released under the [MIT License](LICENSE).
+[MIT License](LICENSE).
