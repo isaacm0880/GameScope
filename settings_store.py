@@ -31,8 +31,17 @@ class SettingsStore:
     def update(self, guild, **changes):
         if guild is None or any(key not in DEFAULTS for key in changes):
             raise ValueError("Invalid settings update")
-        value = self.get(guild)
-        value.update(changes)
-        with sqlite3.connect(self.path) as db:
-            db.execute("INSERT INTO settings (guild,value) VALUES (?,?) ON CONFLICT(guild) DO UPDATE SET value=excluded.value", (guild, json.dumps(value)))
+        # Lock before reading so concurrent updates cannot overwrite each other.
+        with sqlite3.connect(self.path, timeout=30) as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT value FROM settings WHERE guild=?", (guild,)).fetchone()
+            value = dict(DEFAULTS)
+            if row:
+                value.update(json.loads(row[0]))
+            value.update(changes)
+            db.execute(
+                "INSERT INTO settings (guild,value) VALUES (?,?) "
+                "ON CONFLICT(guild) DO UPDATE SET value=excluded.value",
+                (guild, json.dumps(value)),
+            )
         return value
