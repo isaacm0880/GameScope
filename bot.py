@@ -405,11 +405,22 @@ class SettingsMenu(discord.ui.View):
 
     def render(self):
         o = settings.get(self.guild_id)
-        e = discord.Embed(title="Bot settings", description="Server-wide settings · moderator access", colour=int(o["colour"][1:], 16))
-        e.add_field(name="General", value=f'Default visibility: **{o["visibility"]}**\nColour: **{o["colour"]}**\nNews items: **{o["news_count"]}**', inline=False)
-        e.add_field(name="Embed features", value="\n".join(f'{k}: **{"Enabled" if o[k] else "Disabled"}**' for k in ("steamdeck", "anticheat", "pcgamingwiki_link", "steamdb_link")), inline=False)
-        e.add_field(name="Reports", value=f'Count: **{o["report_count"]}**\nNewest first: **{o["newest_first"]}**', inline=False)
-        e.add_field(name="Access", value=f'Moderator role: **{o["moderator_role"] or "None"}**\nAllowed channels: **{", ".join(map(str, o["allowed_channels"])) or "All"}**', inline=False)
+        guild = bot.get_guild(self.guild_id)
+        role = guild.get_role(o["moderator_role"]) if guild and o["moderator_role"] else None
+        role_name = discord.utils.escape_markdown(role.name) if role else ("Not configured" if not o["moderator_role"] else "Role unavailable")
+        channel_names = []
+        for channel_id in o["allowed_channels"]:
+            channel = guild.get_channel(channel_id) if guild else None
+            channel_names.append("#" + discord.utils.escape_markdown(channel.name) if channel else f"Unknown channel ({channel_id})")
+        e = discord.Embed(title="Game bot settings", description="Server-wide settings · moderators only", colour=int(o["colour"][1:], 16))
+        e.add_field(name="Appearance", value=f'Default visibility: **{o["visibility"]}**\\nEmbed colour: **{o["colour"]}**', inline=False)
+        e.add_field(name="Game information", value=(
+            f'ProtonDB reports: **{o["report_count"]}**\\n'
+            f'Steam news articles: **{o["news_count"]}**\\n'
+            f'SteamDB button: **{"On" if o["steamdb_link"] else "Off"}**\\n'
+            f'PCGamingWiki button: **{"On" if o["pcgamingwiki_link"] else "Off"}**'
+        ), inline=False)
+        e.add_field(name="Permissions", value=f'Moderator role: **{role_name}**\\nAllowed channels: **{", ".join(channel_names) or "All channels"}**', inline=False)
         return e
 
     @discord.ui.button(label="Visibility", style=discord.ButtonStyle.primary)
@@ -418,17 +429,17 @@ class SettingsMenu(discord.ui.View):
         settings.update(self.guild_id, visibility="Private" if o["visibility"] == "Public" else "Public")
         await interaction.response.edit_message(embed=self.render(), view=self)
 
-    @discord.ui.button(label="Embed features", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Link buttons", style=discord.ButtonStyle.secondary)
     async def embed_features(self, interaction, button):
         await interaction.response.send_message("Choose a feature to toggle:", view=FeatureMenu(self.guild_id, self.user_id), ephemeral=True)
 
-    @discord.ui.button(label="Reports / news", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Content counts", style=discord.ButtonStyle.secondary)
     async def counts(self, interaction, button):
         await interaction.response.send_message("Choose a setting:", view=CountMenu(self.guild_id, self.user_id), ephemeral=True)
 
     @discord.ui.button(label="Access", style=discord.ButtonStyle.secondary)
     async def access(self, interaction, button):
-        await interaction.response.send_message("Select a moderator role or allowed channels. Clear the selection to reset.", view=AccessMenu(self.guild_id, self.user_id), ephemeral=True)
+        await interaction.response.send_message("Choose a moderator role or allowed channels. Clearing a selection resets it.", view=AccessMenu(self.guild_id, self.user_id), ephemeral=True)
 
     @discord.ui.button(label="Colour", style=discord.ButtonStyle.secondary)
     async def colour(self, interaction, button):
@@ -452,11 +463,9 @@ class SubMenu(discord.ui.View):
 
 
 class FeatureMenu(SubMenu):
-    @discord.ui.select(placeholder="Toggle a feature", options=[
-        discord.SelectOption(label="Steam Deck status", value="steamdeck"),
-        discord.SelectOption(label="Anti-cheat status", value="anticheat"),
-        discord.SelectOption(label="PCGamingWiki links", value="pcgamingwiki_link"),
-        discord.SelectOption(label="SteamDB links", value="steamdb_link"),
+    @discord.ui.select(placeholder="Toggle a link button", options=[
+        discord.SelectOption(label="PCGamingWiki button", value="pcgamingwiki_link"),
+        discord.SelectOption(label="SteamDB button", value="steamdb_link"),
     ])
     async def choose(self, interaction, select):
         key = select.values[0]
@@ -464,14 +473,14 @@ class FeatureMenu(SubMenu):
 
 
 class CountMenu(SubMenu):
-    @discord.ui.select(placeholder="Choose a count or report order", options=[
-        discord.SelectOption(label=f"Reports: {n}", value=f"report_count:{n}") for n in (3, 5, 10)
+    @discord.ui.select(placeholder="Choose how much content to show", options=[
+        discord.SelectOption(label=f"ProtonDB reports: {n}", value=f"report_count:{n}") for n in (3, 5, 10)
     ] + [
-        discord.SelectOption(label=f"News: {n}", value=f"news_count:{n}") for n in (3, 5, 10)
-    ] + [discord.SelectOption(label="Toggle newest-first reports", value="newest_first:toggle")])
+        discord.SelectOption(label=f"Steam news articles: {n}", value=f"news_count:{n}") for n in (3, 5, 10)
+    ])
     async def choose(self, interaction, select):
         key, value = select.values[0].split(":")
-        await self.save(interaction, **{key: not settings.get(self.guild_id)[key] if value == "toggle" else int(value)})
+        await self.save(interaction, **{key: int(value)})
 
 
 class AccessMenu(SubMenu):
