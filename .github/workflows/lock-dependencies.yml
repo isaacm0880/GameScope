@@ -21,7 +21,7 @@ jobs:
           python-version: '3.12'
       - name: Resolve direct and transitive runtime dependencies
         run: |
-          python -m pip install 'pip-tools==7.5.2'
+          python -m pip install 'pip==25.2' 'pip-tools==7.5.2'
           pip-compile --resolver=backtracking --generate-hashes --output-file=requirements.lock requirements.txt
       - name: Create or update lockfile PR
         uses: peter-evans/create-pull-request@v7
