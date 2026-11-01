@@ -7,6 +7,7 @@ embeds.py, parsing in parsers.py.
 from __future__ import annotations
 
 import asyncio
+import os
 import logging
 from typing import Any, Awaitable, Callable
 
@@ -328,8 +329,19 @@ def steam_buttons_view(appid: int, opts: dict | None = None) -> discord.ui.View:
 class ProtonDBBot(commands.Bot):
     async def setup_hook(self) -> None:
         await services.start()
+        await self.apply_saved_presence()
         self.add_dynamic_items(RequirementsButton, ReviewsButton, GameViewSelect, GameNewsButton)
         await self.sync_slash_commands()
+
+    async def apply_saved_presence(self):
+        p = settings.get(0)
+        status = getattr(discord.Status, p["presence_status"], discord.Status.online)
+        kind = p["presence_type"]
+        name = p["presence_text"].strip()
+        activity = None
+        if p["presence_enabled"] and name:
+            activity = discord.Game(name=name) if kind == "playing" else discord.Activity(type=getattr(discord.ActivityType, kind), name=name)
+        await self.change_presence(status=status, activity=activity)
 
     async def sync_slash_commands(self) -> None:
         try:
@@ -441,6 +453,13 @@ class SettingsMenu(discord.ui.View):
     async def access(self, interaction, button):
         await interaction.response.send_message("Choose a moderator role or allowed channels. Clearing a selection resets it.", view=AccessMenu(self.guild_id, self.user_id), ephemeral=True)
 
+    @discord.ui.button(label="Bot presence", style=discord.ButtonStyle.secondary, row=1)
+    async def presence(self, interaction, button):
+        if not is_bot_owner(interaction):
+            await interaction.response.send_message("Only the bot owner can change global presence. Set DISCORD_OWNER_ID in .env.", ephemeral=True)
+            return
+        await interaction.response.send_message(embed=presence_embed(), view=PresenceMenu(self.guild_id, self.user_id), ephemeral=True)
+
     @discord.ui.button(label="Colour", style=discord.ButtonStyle.secondary)
     async def colour(self, interaction, button):
         await interaction.response.send_modal(ColourModal(self.guild_id))
@@ -491,6 +510,71 @@ class AccessMenu(SubMenu):
     @discord.ui.select(cls=discord.ui.ChannelSelect, placeholder="Allowed channels (none = unrestricted)", min_values=0, max_values=10)
     async def choose_channels(self, interaction, select):
         await self.save(interaction, allowed_channels=[c.id for c in select.values])
+
+
+def is_bot_owner(interaction):
+    owner = os.getenv("DISCORD_OWNER_ID", "").strip()
+    return owner.isdigit() and interaction.user.id == int(owner)
+
+
+def presence_embed():
+    p = settings.get(0)
+    e = discord.Embed(title="GameScope presence", description="Global bot presence · owner only", colour=0xB45D1F)
+    e.add_field(name="Status", value=p["presence_status"].title(), inline=True)
+    e.add_field(name="Activity", value=p["presence_type"].title() if p["presence_enabled"] else "Disabled", inline=True)
+    e.add_field(name="Text", value=p["presence_text"] or "None", inline=False)
+    return e
+
+
+class PresenceTextModal(discord.ui.Modal, title="Activity text"):
+    activity_text = discord.ui.TextInput(label="Activity text", placeholder="Steam games", max_length=120)
+
+    async def on_submit(self, interaction):
+        if not is_bot_owner(interaction):
+            await interaction.response.send_message("Not authorised.", ephemeral=True)
+            return
+        settings.update(0, presence_text=str(self.activity_text.value))
+        await bot.apply_saved_presence()
+        await interaction.response.send_message("Presence text saved.", ephemeral=True)
+
+
+class PresenceMenu(SubMenu):
+    async def interaction_check(self, interaction):
+        if not is_bot_owner(interaction):
+            await interaction.response.send_message("Only the bot owner can change presence.", ephemeral=True)
+            return False
+        return await super().interaction_check(interaction)
+
+    async def save_presence(self, interaction, **changes):
+        settings.update(0, **changes)
+        await bot.apply_saved_presence()
+        await interaction.response.edit_message(embed=presence_embed(), view=self)
+
+    @discord.ui.select(placeholder="Bot status", options=[
+        discord.SelectOption(label="Online", value="online"),
+        discord.SelectOption(label="Idle", value="idle"),
+        discord.SelectOption(label="Do Not Disturb", value="dnd"),
+        discord.SelectOption(label="Invisible", value="invisible"),
+    ])
+    async def status_select(self, interaction, select):
+        await self.save_presence(interaction, presence_status=select.values[0])
+
+    @discord.ui.select(placeholder="Activity type", options=[
+        discord.SelectOption(label="Playing", value="playing"),
+        discord.SelectOption(label="Watching", value="watching"),
+        discord.SelectOption(label="Listening", value="listening"),
+        discord.SelectOption(label="Competing", value="competing"),
+    ])
+    async def activity_select(self, interaction, select):
+        await self.save_presence(interaction, presence_type=select.values[0])
+
+    @discord.ui.button(label="Change text", style=discord.ButtonStyle.primary)
+    async def text_button(self, interaction, button):
+        await interaction.response.send_modal(PresenceTextModal())
+
+    @discord.ui.button(label="Enable / disable activity", style=discord.ButtonStyle.secondary)
+    async def toggle(self, interaction, button):
+        await self.save_presence(interaction, presence_enabled=not settings.get(0)["presence_enabled"])
 
 
 class ColourModal(discord.ui.Modal, title="Embed colour"):
