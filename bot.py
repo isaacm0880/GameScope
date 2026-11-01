@@ -631,6 +631,77 @@ async def news_command(
     await run_lookup(interaction, f"/news game={game!r} appid={appid}", handler, public=public_response(interaction, visibility))
 
 
+async def news_lookup(interaction, resolved, updates_only=False):
+    o = options(interaction)
+    (app, _), (items, error) = await asyncio.gather(
+        capture(services.steam_app(resolved.appid)),
+        capture(services.news(resolved.appid, count=max(20, o["news_count"]) if updates_only else o["news_count"])),
+    )
+    if error:
+        raise error
+    name = (app.name if app else None) or resolved.name or services.known_name(resolved.appid) or f"Steam App {resolved.appid}"
+    if updates_only:
+        import re
+        pattern = re.compile(r"patch notes|hotfix|update|changelog|release notes|version [0-9]|maintenance", re.I)
+        items = [item for item in (items or []) if pattern.search(item.title or "")][:o["news_count"]]
+    embed = embeds.build_news_embed(name, resolved.appid, items or [])
+    if updates_only:
+        embed.title = f"{name} — game updates"
+        if not items:
+            embed.description = "No clearly labelled patch notes or game updates found among the latest Steam announcements."
+    await send_embed(interaction, embed)
+
+
+@bot.tree.command(name="gameupdate", description="Find recent patch notes and game updates.")
+@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID", visibility="Public or private response")
+@app_commands.choices(visibility=VISIBILITY_CHOICES)
+@app_commands.autocomplete(game=game_autocomplete)
+async def gameupdate_command(
+    interaction: discord.Interaction,
+    game: str | None = None,
+    appid: app_commands.Range[int, 1, 999999999] | None = None,
+    visibility: str | None = None,
+):
+    async def handler():
+        resolved = await resolve_input(interaction, game, appid)
+        if resolved:
+            await news_lookup(interaction, resolved, updates_only=True)
+    await run_lookup(interaction, f"/gameupdate {game!r} {appid}", handler, public=public_response(interaction, visibility))
+
+
+@bot.tree.command(name="steamdb", description="SteamDB technical links and Steam game metadata.")
+@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID", visibility="Public or private response")
+@app_commands.choices(visibility=VISIBILITY_CHOICES)
+@app_commands.autocomplete(game=game_autocomplete)
+async def steamdb_command(
+    interaction: discord.Interaction,
+    game: str | None = None,
+    appid: app_commands.Range[int, 1, 999999999] | None = None,
+    visibility: str | None = None,
+):
+    async def handler():
+        resolved = await resolve_input(interaction, game, appid)
+        if not resolved:
+            return
+        app, error = await capture(services.steam_app(resolved.appid))
+        name = (app.name if app else None) or resolved.name or f"Steam App {resolved.appid}"
+        embed = embeds.new_embed(title=embeds.title_text(f"{name} — SteamDB"),
+            url=f"https://steamdb.info/app/{resolved.appid}/",
+            description="Technical game information and links. SteamDB does not offer a general public API for live branch/build history.")
+        embed.add_field(name="Steam App ID", value=f"`{resolved.appid}`", inline=True)
+        if app and app.release_date:
+            embed.add_field(name="Release date", value=embeds.safe_text(app.release_date), inline=True)
+        embed.add_field(name="SteamDB", value=(
+            f"[Overview](https://steamdb.info/app/{resolved.appid}/) · "
+            f"[Depots](https://steamdb.info/app/{resolved.appid}/depots/) · "
+            f"[Branches](https://steamdb.info/app/{resolved.appid}/depots/) · "
+            f"[Patches](https://steamdb.info/app/{resolved.appid}/patchnotes/)"), inline=False)
+        embed.set_footer(text="Links lead to SteamDB. Build and depot history are not fetched by this bot.")
+        await send_embed(interaction, embed)
+    await run_lookup(interaction, f"/steamdb {game!r} {appid}", handler, public=public_response(interaction, visibility))
+
+
+
 def main() -> None:
     if not config.TOKEN:
         raise SystemExit("DISCORD_TOKEN is missing. Set it in your .env file.")
