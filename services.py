@@ -56,6 +56,7 @@ NEWS_URL = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
 PROTONDB_SUMMARY_URL = "https://www.protondb.com/api/v1/reports/summaries/{appid}.json"
 PROTONDB_COUNTS_URL = "https://www.protondb.com/data/counts.json"
 PROTONDB_REPORTS_URL = "https://www.protondb.com/data/reports/all-devices/app/{hash}.json"
+PROTON_PULSE_REPORTS_URL = "https://www.proton-pulse.com/data/{appid}/latest.json"
 
 MAX_CONCURRENT_REQUESTS = 8
 
@@ -335,6 +336,33 @@ class GameServices:
         return result
 
     async def _load_reports(self, appid: int, limit: int) -> ReportsResult:
+        """Try ProtonDB detailed reports, then the Proton Pulse archived mirror."""
+        primary = await self._load_protondb_reports(appid, limit)
+        if primary.ok and primary.reports:
+            return primary
+
+        try:
+            payload = await self._request_json(
+                PROTON_PULSE_REPORTS_URL.format(appid=appid),
+                service="Proton Pulse",
+                retries=0,
+            )
+            if payload is not None:
+                reports = parse_protondb_reports(payload)
+                reports.sort(key=lambda r: r.timestamp or 0, reverse=True)
+                if reports:
+                    log.info("Using Proton Pulse report mirror for Steam app %s", appid)
+                    return ReportsResult(reports=reports[:limit], ok=True,
+                                         reason="Proton Pulse mirror")
+                return ReportsResult(ok=True, reports=[])
+        except (UpstreamError, BadResponse) as exc:
+            log.warning("Proton Pulse mirror unavailable for app %s: %s", appid, exc)
+        except Exception:
+            log.exception("Unexpected Proton Pulse mirror error for app %s", appid)
+
+        return primary
+
+    async def _load_protondb_reports(self, appid: int, limit: int) -> ReportsResult:
         try:
             counts = await self._protondb_counts()
         except UpstreamError as exc:
