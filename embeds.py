@@ -254,11 +254,6 @@ def build_protondb_embed(
         )
 
     add_field(embed, "Linux troubleshooting", TROUBLESHOOTING.replace("{appid}", str(appid)))
-    add_field(
-        embed,
-        "Links",
-        f"[ProtonDB reports]({page}) · [Steam store](https://store.steampowered.com/app/{appid}/)",
-    )
     embed.set_footer(text="Source: ProtonDB community reports. Compatibility can change with game or Proton updates.")
     return enforce_limits(embed)
 
@@ -325,7 +320,6 @@ def build_steam_embed(app: SteamApp, summary: ReviewSummary | None, reviews_unav
               safe_text(", ".join(app.publishers)) if app.publishers else "Not available", inline=True)
     add_field(embed, "Genres",
               safe_text(", ".join(app.genres)) if app.genres else "Not available", inline=False)
-    add_field(embed, "Store page", f"[Open on Steam]({app.store_url})", inline=False)
     embed.set_footer(text=f"Steam store data ({config.STEAM_COUNTRY.upper()} region). Prices and reviews change over time.")
     return enforce_limits(embed)
 
