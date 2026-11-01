@@ -98,19 +98,40 @@ In the [Discord Developer Portal](https://discord.com/developers/applications), 
 
 Recommended bot permissions: **View Channels**, **Send Messages**, and **Embed Links**. The bot does not need the Administrator permission or the Message Content privileged intent.
 
-### 4. Start
+### 4. Build and start (first installation)
 
 ```bash
 docker compose up -d --build
+```
+
+This builds the image and starts GameScope in the background. The `-d` option keeps it running after you close the terminal or SSH session.
+
+### Normal startup
+
+After the image has been built, start GameScope without rebuilding:
+
+```bash
+docker compose up -d
+```
+
+To view live logs without stopping the bot when you press Ctrl+C:
+
+```bash
 docker compose logs -f
 ```
 
-### Updating
+### Updating the bot
+
+After pulling new code, rebuild the image to include the changes:
 
 ```bash
 git pull --ff-only
 docker compose up -d --build
 ```
+
+You only need `--build` for the initial build or when rebuilding after code, dependency or Dockerfile changes. Ordinary restarts do not require it.
+
+To stop GameScope, run `docker compose down` (without `-v` to keep settings).
 
 The named Docker volume `gamescope-settings` stores SQLite settings across container rebuilds. Existing installations using the old `protondb-settings` volume must migrate the SQLite database before switching to this Compose configuration. Do not remove the volume if you want to keep your configuration.
 
