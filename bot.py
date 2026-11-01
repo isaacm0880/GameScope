@@ -413,14 +413,14 @@ class SettingsMenu(discord.ui.View):
             channel = guild.get_channel(channel_id) if guild else None
             channel_names.append("#" + discord.utils.escape_markdown(channel.name) if channel else f"Unknown channel ({channel_id})")
         e = discord.Embed(title="Game bot settings", description="Server-wide settings · moderators only", colour=int(o["colour"][1:], 16))
-        e.add_field(name="Appearance", value=f'Default visibility: **{o["visibility"]}**\\nEmbed colour: **{o["colour"]}**', inline=False)
+        e.add_field(name="Appearance", value=f'Default visibility: **{o["visibility"]}**\nEmbed colour: **{o["colour"]}**', inline=False)
         e.add_field(name="Game information", value=(
-            f'ProtonDB reports: **{o["report_count"]}**\\n'
-            f'Steam news articles: **{o["news_count"]}**\\n'
-            f'SteamDB button: **{"On" if o["steamdb_link"] else "Off"}**\\n'
+            f'ProtonDB reports: **{o["report_count"]}**\n'
+            f'Steam news articles: **{o["news_count"]}**\n'
+            f'SteamDB button: **{"On" if o["steamdb_link"] else "Off"}**\n'
             f'PCGamingWiki button: **{"On" if o["pcgamingwiki_link"] else "Off"}**'
         ), inline=False)
-        e.add_field(name="Permissions", value=f'Moderator role: **{role_name}**\\nAllowed channels: **{", ".join(channel_names) or "All channels"}**', inline=False)
+        e.add_field(name="Permissions", value=f'Moderator role: **{role_name}**\nAllowed channels: **{", ".join(channel_names) or "All channels"}**', inline=False)
         return e
 
     @discord.ui.button(label="Visibility", style=discord.ButtonStyle.primary)
@@ -565,7 +565,7 @@ async def build_game_embed(interaction: discord.Interaction, appid: int, view_na
             link = embeds.news_link(latest, appid)
             date = f"<t:{latest.date}:D>" if latest.date else "Date unknown"
             embed.add_field(name="Latest game update", value=f"**{embeds.safe_text(latest.title)}** · {date}" +
-                            (f"\\n[Read patch notes]({link})" if link else ""), inline=False)
+                            (f"\n[Read patch notes]({link})" if link else ""), inline=False)
         else:
             embed.add_field(name="Latest game update", value="No clearly labelled game update found in recent Steam news.", inline=False)
     else:
