@@ -387,14 +387,6 @@ def moderator(interaction):
 def customise(interaction, embed, appid=None):
     o = options(interaction)
     embed.colour = discord.Colour(int(o["colour"][1:], 16))
-    if False and appid is not None:
-        links = []
-        if o["steamdb_link"]:
-            links.append(f"[SteamDB](https://steamdb.info/app/{appid}/)")
-        if o["pcgamingwiki_link"]:
-            links.append("[PCGamingWiki](https://www.pcgamingwiki.com/)")
-        if links and len(embed.fields) < 25:
-            embed.add_field(name="Other resources", value=" · ".join(links), inline=False)
     return embeds.enforce_limits(embed)
 
 
@@ -616,7 +608,7 @@ async def show_steam(interaction: discord.Interaction, resolved: ResolvedGame) -
 
 def is_game_update(item) -> bool:
     import re
-    if item.feedname != "steam_community_announcements":
+    if item.feedname != "steam_community_announcements" and "steam_community_announcements" not in (item.url or ""):
         return False
     if not is_english_news(item):
         return False
