@@ -1,7 +1,7 @@
 services:
-  protondb-bot:
+  gamescope:
     build: .
-    container_name: protondb-discord-bot
+    container_name: gamescope
     restart: unless-stopped
     env_file:
       - .env
@@ -10,8 +10,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       SETTINGS_DB: /data/settings.sqlite3
     volumes:
-      - protondb-settings:/data
+      - gamescope-settings:/data
     init: true
 
 volumes:
-  protondb-settings:
+  gamescope-settings:
