@@ -8,7 +8,7 @@ DEFAULTS = {
     "visibility": "Public", "colour": "#B45D1F", "report_count": 3,
     "news_count": 5, "newest_first": True, "steamdeck": True,
     "anticheat": True, "pcgamingwiki_link": True, "steamdb_link": True,
-    "moderator_role": None, "allowed_channels": [],
+    "moderator_role": None, "settings_roles": [], "allowed_channels": [],
     "presence_status": "online", "presence_type": "playing", "presence_text": "Steam games", "presence_enabled": True,
 }
 
