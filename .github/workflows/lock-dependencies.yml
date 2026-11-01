@@ -24,7 +24,7 @@ jobs:
           python -m pip install 'pip==25.2' 'pip-tools==7.5.2'
           pip-compile --resolver=backtracking --generate-hashes --output-file=requirements.lock requirements.txt
       - name: Create or update lockfile PR
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: 'chore: refresh Python dependency lock'
           branch: chore/refresh-dependency-lock
