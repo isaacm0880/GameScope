@@ -393,10 +393,8 @@ def moderator(interaction):
     if not interaction.guild or not isinstance(interaction.user, discord.Member):
         return False
     p = interaction.user.guild_permissions
-    role = options(interaction)["moderator_role"]
-    return p.administrator or p.manage_guild or p.manage_messages or (
-        role is not None and any(r.id == role for r in interaction.user.roles)
-    )
+    allowed = options(interaction).get("settings_roles", [])
+    return p.administrator or any(r.id in allowed for r in interaction.user.roles)
 
 def customise(interaction, embed, appid=None):
     o = options(interaction)
@@ -418,13 +416,13 @@ class SettingsMenu(discord.ui.View):
     def render(self):
         o = settings.get(self.guild_id)
         guild = bot.get_guild(self.guild_id)
-        role = guild.get_role(o["moderator_role"]) if guild and o["moderator_role"] else None
-        role_name = discord.utils.escape_markdown(role.name) if role else ("Not configured" if not o["moderator_role"] else "Role unavailable")
+        roles = [guild.get_role(rid) for rid in o.get("settings_roles", [])] if guild else []
+        role_name = ", ".join(discord.utils.escape_markdown(r.name) for r in roles if r) or "Administrators only"
         channel_names = []
         for channel_id in o["allowed_channels"]:
             channel = guild.get_channel(channel_id) if guild else None
             channel_names.append("#" + discord.utils.escape_markdown(channel.name) if channel else f"Unknown channel ({channel_id})")
-        e = discord.Embed(title="Game bot settings", description="Server-wide settings · moderators only", colour=int(o["colour"][1:], 16))
+        e = discord.Embed(title="GameScope settings", description="Server-wide settings · moderators only", colour=int(o["colour"][1:], 16))
         e.add_field(name="Appearance", value=f'Default visibility: **{o["visibility"]}**\nEmbed colour: **{o["colour"]}**', inline=False)
         e.add_field(name="Game information", value=(
             f'ProtonDB reports: **{o["report_count"]}**\n'
@@ -432,7 +430,7 @@ class SettingsMenu(discord.ui.View):
             f'SteamDB button: **{"On" if o["steamdb_link"] else "Off"}**\n'
             f'PCGamingWiki button: **{"On" if o["pcgamingwiki_link"] else "Off"}**'
         ), inline=False)
-        e.add_field(name="Permissions", value=f'Moderator role: **{role_name}**\nAllowed channels: **{", ".join(channel_names) or "All channels"}**', inline=False)
+        e.add_field(name="Permissions", value=f'Settings access: **{role_name}**\nAllowed channels: **{", ".join(channel_names) or "All channels"}**', inline=False)
         return e
 
     @discord.ui.button(label="Visibility", style=discord.ButtonStyle.primary)
@@ -455,8 +453,8 @@ class SettingsMenu(discord.ui.View):
 
     @discord.ui.button(label="Bot presence", style=discord.ButtonStyle.secondary, row=1)
     async def presence(self, interaction, button):
-        if not is_bot_owner(interaction):
-            await interaction.response.send_message("Only the bot owner can change global presence. Set DISCORD_OWNER_ID in .env.", ephemeral=True)
+        if not moderator(interaction):
+            await interaction.response.send_message("Only administrators and authorised settings roles can change presence.", ephemeral=True)
             return
         await interaction.response.send_message(embed=presence_embed(), view=PresenceMenu(self.guild_id, self.user_id), ephemeral=True)
 
@@ -503,23 +501,21 @@ class CountMenu(SubMenu):
 
 
 class AccessMenu(SubMenu):
-    @discord.ui.select(cls=discord.ui.RoleSelect, placeholder="Moderator role (optional)", min_values=0, max_values=1)
+    @discord.ui.select(cls=discord.ui.RoleSelect, placeholder="Additional settings roles (none = admins only)", min_values=0, max_values=10)
     async def choose_role(self, interaction, select):
-        await self.save(interaction, moderator_role=select.values[0].id if select.values else None)
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Only administrators can grant settings access.", ephemeral=True)
+            return
+        await self.save(interaction, settings_roles=[r.id for r in select.values])
 
     @discord.ui.select(cls=discord.ui.ChannelSelect, placeholder="Allowed channels (none = unrestricted)", min_values=0, max_values=10)
     async def choose_channels(self, interaction, select):
         await self.save(interaction, allowed_channels=[c.id for c in select.values])
 
 
-def is_bot_owner(interaction):
-    owner = os.getenv("DISCORD_OWNER_ID", "").strip()
-    return owner.isdigit() and interaction.user.id == int(owner)
-
-
 def presence_embed():
     p = settings.get(0)
-    e = discord.Embed(title="GameScope presence", description="Global bot presence · owner only", colour=0xB45D1F)
+    e = discord.Embed(title="GameScope presence", description="Global bot presence · settings permissions", colour=0xB45D1F)
     e.add_field(name="Status", value=p["presence_status"].title(), inline=True)
     e.add_field(name="Activity", value=p["presence_type"].title() if p["presence_enabled"] else "Disabled", inline=True)
     e.add_field(name="Text", value=p["presence_text"] or "None", inline=False)
@@ -541,7 +537,7 @@ class PresenceTextModal(discord.ui.Modal, title="Activity text"):
 class PresenceMenu(SubMenu):
     async def interaction_check(self, interaction):
         if not is_bot_owner(interaction):
-            await interaction.response.send_message("Only the bot owner can change presence.", ephemeral=True)
+            await interaction.response.send_message("Only administrators and authorised settings roles can change presence.", ephemeral=True)
             return False
         return await super().interaction_check(interaction)
 
