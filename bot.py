@@ -646,13 +646,14 @@ def game_view(appid: int, selected: str, opts: dict) -> discord.ui.View:
     if selected == "Steam":
         view.add_item(RequirementsButton(appid))
         view.add_item(ReviewsButton(appid))
-    view.add_item(GameNewsButton(appid))
+    if selected == "Steam":
+        view.add_item(GameNewsButton(appid))
     add_links(view, appid, proton=selected != "Steam", opts=opts)
     return view
 
 
 @bot.tree.command(name="game", description="Look up a game on ProtonDB or Steam.")
-@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID", view="Choose ProtonDB or Steam", visibility="Public or private response")
+@app_commands.describe(game="Game name or Steam App ID (required)", view="Choose ProtonDB or Steam", visibility="Public or private response")
 @app_commands.choices(
     view=[
         app_commands.Choice(name="ProtonDB", value="ProtonDB"),
@@ -663,19 +664,18 @@ def game_view(appid: int, selected: str, opts: dict) -> discord.ui.View:
 @app_commands.autocomplete(game=game_autocomplete)
 async def game_command(
     interaction: discord.Interaction,
-    game: str | None = None,
-    appid: app_commands.Range[int, 1, 999999999] | None = None,
+    game: str,
     view: str | None = None,
     visibility: str | None = None,
 ):
     async def handler():
-        resolved = await resolve_input(interaction, game, appid)
+        resolved = await need_game(interaction, game)
         if resolved is None:
             return
         chosen = view or "ProtonDB"
         embed = await build_game_embed(interaction, resolved.appid, chosen)
         await send_embed(interaction, embed, view=game_view(resolved.appid, chosen, options(interaction)))
-    await run_lookup(interaction, f"/game game={game!r} appid={appid}", handler, public=public_response(interaction, visibility))
+    await run_lookup(interaction, f"/game game={game!r}", handler, public=public_response(interaction, visibility))
 
 
 
