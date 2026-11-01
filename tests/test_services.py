@@ -167,7 +167,7 @@ class Reports(unittest.TestCase):
         svc = make(lambda u, p: J(self.COUNTS) if u.endswith("counts.json") else Resp(429))
         res = run(svc.protondb_reports(1))
         self.assertFalse(res.ok)
-        self.assertEqual(len(svc.session.calls), 2)  # stopped after first 429
+        self.assertEqual(len(svc.session.calls), 3)  # counts, rate-limited primary, then fallback mirror
 
     def test_wrong_shape_skipped(self):
         svc = make(lambda u, p: J(self.COUNTS) if u.endswith("counts.json") else J({"hello": 1}))
