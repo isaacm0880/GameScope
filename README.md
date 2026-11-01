@@ -16,7 +16,7 @@ Originally built for the [Playden PS5](https://github.com/leolobato/playden-ps5)
 - **News** button in the Steam view for recent announcements, plus the latest identifiable game update in the Steam embed.
 - External links to Steam, ProtonDB, SteamDB and PCGamingWiki (the latter two can be disabled per server).
 - Public or private results, configurable embed colour and content counts.
-- Custom Discord bot presence (status, activity type and text), saved across restarts.
+- Custom Discord bot presence (status, activity type and text), saved across restarts. The default is **Watching /game**.
 - Administrator-only settings by default; administrators can grant additional roles access.
 - SQLite persistence using a Docker volume.
 
@@ -113,18 +113,6 @@ docker compose up -d --build
 ```
 
 The named Docker volume stores SQLite settings across container rebuilds. Do not remove the volume if you want to keep your configuration.
-
-### Testing the feature branch
-
-Until the feature branch is merged, check it out explicitly:
-
-```bash
-git fetch origin
-git switch --track origin/feature/compatibility-settings-v2
-docker compose up -d --build
-```
-
-If you already have the branch checked out, run `git pull --ff-only` instead. Use a separate Discord bot token when running production and test instances simultaneously; two instances using the same token can interfere with each other.
 
 ## Troubleshooting
 
