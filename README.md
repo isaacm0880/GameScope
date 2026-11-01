@@ -14,7 +14,7 @@ Originally created for the [Playden PS5 project](https://github.com/leolobato/pl
 - Check ProtonDB compatibility tiers and community reports.
 - View Steam store details, current regional pricing and Steam user-review ratings.
 - Open separate **Requirements** and **Reviews** embeds using buttons.
-- Read recent English-language Steam game announcements.\n- See the latest identifiable official game update directly in `/steam`.\n- Open Steam, ProtonDB, SteamDB and PCGamingWiki through link buttons.
+- Read recent English-language Steam game announcements.\n- See the latest identifiable official game update directly in `/game view:Steam`.\n- Open Steam, ProtonDB, SteamDB and PCGamingWiki through link buttons.
 - Look up games by Steam App ID.
 - Docker-based deployment with configurable caching and Steam region/language.
 - Server-configurable embed colour, visibility, links, report/news counts, moderator role and allowed channels.\n- Persistent settings stored in a Docker volume.\n- Anti-cheat and Steam Deck toggles are reserved for future data integrations; they do not currently fetch compatibility statuses.
@@ -23,10 +23,10 @@ Originally created for the [Playden PS5 project](https://github.com/leolobato/pl
 
 | Command | Description |
 | --- | --- |
-| `/protondb` | Search a game and view its ProtonDB compatibility tier, community reports and Linux-focused troubleshooting. |
+| `/game` | Search a game and view its ProtonDB compatibility tier, community reports and Linux-focused troubleshooting. |
 | `/settings` | Moderator-only interactive server settings menu. |
-| `/steam` | Show Steam game details, rating, price and links. Use **Requirements** and **Reviews** buttons for additional information. |
-| `/news` | Show recent Steam announcements for a game. |
+| `/game view:Steam` | Show Steam game details, rating, price and links. Use **Requirements** and **Reviews** buttons for additional information. |
+| News button | Show recent Steam announcements for a game. |
 
 All game commands accept optional `game`, `appid` and `visibility` (Public or Private). Provide a game name or an App ID. Public is the default unless moderators change it. Game-name commands support autocomplete. Some data may be unavailable if Steam or ProtonDB changes an endpoint, limits requests, or has no information for the selected game.
 
@@ -119,3 +119,7 @@ This is an independent community project and is not officially affiliated with V
 ## License
 
 Released under the [MIT License](LICENSE).
+
+## Unified game command
+
+Use `/game game:Cyberpunk 2077` (ProtonDB by default), `/game game:Cyberpunk 2077 view:Steam`, or `/game appid:1091500 visibility:Private`. Switch between ProtonDB and Steam using the dropdown on the result. The News button opens recent news privately. The old `/steam`, `/protondb`, and `/news` commands are removed.
