@@ -329,7 +329,6 @@ def steam_buttons_view(appid: int, opts: dict | None = None) -> discord.ui.View:
 class ProtonDBBot(commands.Bot):
     async def setup_hook(self) -> None:
         await services.start()
-        await self.apply_saved_presence()
         self.add_dynamic_items(RequirementsButton, ReviewsButton, GameViewSelect, GameNewsButton)
         await self.sync_slash_commands()
 
@@ -603,6 +602,10 @@ async def settings_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready() -> None:
     log.info("Logged in as %s (%s)", bot.user, bot.user.id if bot.user else "?")
+    try:
+        await bot.apply_saved_presence()
+    except Exception:
+        log.exception("Could not restore saved Discord presence")
 
 
 @bot.tree.error
