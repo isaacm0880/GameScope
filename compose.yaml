@@ -8,4 +8,9 @@ services:
     environment:
       CACHE_SECONDS: ${CACHE_SECONDS:-900}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - protondb-settings:/data
     init: true
+
+volumes:
+  protondb-settings:
