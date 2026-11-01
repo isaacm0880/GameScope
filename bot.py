@@ -675,14 +675,9 @@ async def build_game_embed(interaction: discord.Interaction, appid: int, view_na
     return customise(interaction, embed, appid)
 
 
-def is_english_news(item) -> bool:
-    import re
-    return True  # Steam news has no reliable per-item language metadata; do not guess from script.
-
-
 def is_game_update(item) -> bool:
     import re
-    return is_english_news(item) and bool(re.search(
+    return bool(re.search(
         r"patch\\s*notes?|hot\\s*fix|updates?|changelog|release notes|version\\s*[0-9]|"
         r"v[0-9]+(?:\\.[0-9]+)+|maintenance|bug\\s*fix|game\\s*fixes",
         item.title or "", re.I,
@@ -697,8 +692,8 @@ async def send_game_news(interaction: discord.Interaction, appid: int):
     if error:
         raise error
     name = (app.name if app else None) or services.known_name(appid) or f"Steam App {appid}"
-    english = [item for item in (items or []) if is_english_news(item)]
-    await send_embed(interaction, embeds.build_news_embed(name, appid, english[:options(interaction)["news_count"]]), ephemeral=True)
+    # Steam does not supply reliable per-article language metadata. Avoid rejecting valid titles.
+    await send_embed(interaction, embeds.build_news_embed(name, appid, (items or [])[:options(interaction)["news_count"]]), ephemeral=True)
 
 
 class GameViewSelect(discord.ui.DynamicItem[discord.ui.Select], template=r"game:view:(?P<appid>[0-9]+)"):
