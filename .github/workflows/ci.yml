@@ -18,7 +18,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest
+          if test -f requirements.lock; then
+            python -m pip install --require-hashes -r requirements.lock
+          else
+            python -m pip install -r requirements.txt
+          fi
+          python -m pip install pytest
       - name: Check Python syntax
         run: python -m compileall -q .
       - name: Run tests
