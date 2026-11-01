@@ -525,25 +525,37 @@ class PresenceTextModal(discord.ui.Modal, title="Activity text"):
     activity_text = discord.ui.TextInput(label="Activity text", placeholder="Steam games", max_length=120)
 
     async def on_submit(self, interaction):
-        if not is_bot_owner(interaction):
+        if not moderator(interaction):
             await interaction.response.send_message("Not authorised.", ephemeral=True)
             return
+        await interaction.response.defer(ephemeral=True)
         settings.update(0, presence_text=str(self.activity_text.value))
-        await bot.apply_saved_presence()
-        await interaction.response.send_message("Presence text saved.", ephemeral=True)
+        try:
+            await bot.apply_saved_presence()
+        except Exception:
+            log.exception("Failed to apply presence text")
+            await interaction.followup.send("Saved, but Discord could not apply the presence. Check logs.", ephemeral=True)
+            return
+        await interaction.followup.send("Presence text saved.", ephemeral=True)
 
 
 class PresenceMenu(SubMenu):
     async def interaction_check(self, interaction):
-        if not is_bot_owner(interaction):
+        if not moderator(interaction):
             await interaction.response.send_message("Only administrators and authorised settings roles can change presence.", ephemeral=True)
             return False
         return await super().interaction_check(interaction)
 
     async def save_presence(self, interaction, **changes):
+        await interaction.response.defer()
         settings.update(0, **changes)
-        await bot.apply_saved_presence()
-        await interaction.response.edit_message(embed=presence_embed(), view=self)
+        try:
+            await bot.apply_saved_presence()
+        except Exception:
+            log.exception("Failed to apply presence settings")
+            await interaction.followup.send("Saved, but Discord could not apply the presence. Check logs.", ephemeral=True)
+            return
+        await interaction.edit_original_response(embed=presence_embed(), view=self)
 
     @discord.ui.select(placeholder="Bot status", options=[
         discord.SelectOption(label="Online", value="online"),
