@@ -17,18 +17,18 @@ Originally created for the [Playden PS5 project](https://github.com/leolobato/pl
 - Read recent Steam game announcements.
 - Look up games by Steam App ID.
 - Docker-based deployment with configurable caching and Steam region/language.
-- Consistent orange (`#B45D1F`) embeds.
+- Server-configurable embed colour, visibility, links, report/news counts, moderator role and allowed channels.\n- Persistent settings stored in a Docker volume.\n- Anti-cheat and Steam Deck toggles are reserved for future data integrations; they do not currently fetch compatibility statuses.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
 | `/protondb` | Search a game and view its ProtonDB compatibility tier, community reports and Linux-focused troubleshooting. |
-| `/protondbid` | Look up ProtonDB compatibility using a Steam App ID. |
+| `/steamdb` | SteamDB technical links and available Steam metadata. |\n| `/gameupdate` | Recent Steam announcements filtered for patch notes and updates. |\n| `/settings` | Moderator-only interactive server settings menu. |
 | `/steam` | Show Steam game details, rating, price and links. Use **Requirements** and **Reviews** buttons for additional information. |
 | `/news` | Show recent Steam announcements for a game. |
 
-Game-name commands support autocomplete. Some data may be unavailable if Steam or ProtonDB changes an endpoint, limits requests, or has no information for the selected game.
+All game commands accept optional `game`, `appid` and `visibility` (Public or Private). Provide a game name or an App ID. Public is the default unless moderators change it. Game-name commands support autocomplete. Some data may be unavailable if Steam or ProtonDB changes an endpoint, limits requests, or has no information for the selected game.
 
 ## Invite or self-host
 
@@ -89,7 +89,7 @@ The bot was created for the Playden community, but you can also host your own in
    docker compose logs -f
    ```
 
-### Updating
+### Testing the feature branch\n\nRun this branch with a separate Discord bot token if production is still online; running two instances with the same token can interfere with command syncing.\n\n```bash\ngit fetch origin\ngit switch --track origin/feature/compatibility-settings-v2\ndocker compose up -d --build\n```\n\n### Updating
 
 ```bash
 git pull
