@@ -71,11 +71,9 @@ Configure the bot through an interactive Discord menu.
 ### 1. Clone
 
 ```bash
-git clone https://github.com/isaacm0880/ProtonDB-Discord-Bot.git
-cd ProtonDB-Discord-Bot
+git clone https://github.com/isaacm0880/GameScope.git
+cd GameScope
 ```
-
-> The GitHub repository retains its existing name for now; the bot's project name is **GameScope**.
 
 ### 2. Configure environment
 
