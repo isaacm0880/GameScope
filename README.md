@@ -14,7 +14,7 @@ Originally created for the [Playden PS5 project](https://github.com/leolobato/pl
 - Check ProtonDB compatibility tiers and community reports.
 - View Steam store details, current regional pricing and Steam user-review ratings.
 - Open separate **Requirements** and **Reviews** embeds using buttons.
-- Read recent Steam game announcements.
+- Read recent English-language Steam game announcements.\n- See the latest identifiable official game update directly in `/steam`.\n- Open Steam, ProtonDB, SteamDB and PCGamingWiki through link buttons.
 - Look up games by Steam App ID.
 - Docker-based deployment with configurable caching and Steam region/language.
 - Server-configurable embed colour, visibility, links, report/news counts, moderator role and allowed channels.\n- Persistent settings stored in a Docker volume.\n- Anti-cheat and Steam Deck toggles are reserved for future data integrations; they do not currently fetch compatibility statuses.
@@ -24,7 +24,7 @@ Originally created for the [Playden PS5 project](https://github.com/leolobato/pl
 | Command | Description |
 | --- | --- |
 | `/protondb` | Search a game and view its ProtonDB compatibility tier, community reports and Linux-focused troubleshooting. |
-| `/steamdb` | SteamDB technical links and available Steam metadata. |\n| `/gameupdate` | Recent Steam announcements filtered for patch notes and updates. |\n| `/settings` | Moderator-only interactive server settings menu. |
+| `/settings` | Moderator-only interactive server settings menu. |
 | `/steam` | Show Steam game details, rating, price and links. Use **Requirements** and **Reviews** buttons for additional information. |
 | `/news` | Show recent Steam announcements for a game. |
 
