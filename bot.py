@@ -602,24 +602,32 @@ async def show_steam(interaction: discord.Interaction, resolved: ResolvedGame) -
         date = f"<t:{latest.date}:D>" if latest.date else "Date unknown"
         embed.add_field(name="Latest game update", value=f"**{title}** · {date}" + (f"\n[Read patch notes]({link})" if link else ""), inline=False)
     else:
-        embed.add_field(name="Latest game update", value="No verified game update found in recent official Steam announcements.", inline=False)
+        embed.add_field(name="Latest game update", value="No clearly labelled game update found in the latest Steam news.", inline=False)
     await send_embed(interaction, customise(interaction, embed, app.appid), view=steam_buttons_view(app.appid, options(interaction)))
 
 
-def is_game_update(item) -> bool:
+def is_english_news(item) -> bool:
+    """Reject clearly non-English headlines without rejecting translated body text."""
     import re
-    if item.feedname != "steam_community_announcements" and "steam_community_announcements" not in (item.url or ""):
+    title = item.title or ""
+    # Most Steam news is multilingual; only exclude unmistakable non-Latin headlines.
+    if re.search("[\\u0400-\\u052f\\u0600-\\u06ff\\u4e00-\\u9fff\\u3040-\\u30ff\\uac00-\\ud7af]", title):
         return False
+    return True
+
+
+def is_game_update(item) -> bool:
+    """Find update posts; do not assume all developers use one Steam feed name."""
+    import re
     if not is_english_news(item):
         return False
-    return bool(re.search(r"patch notes|hotfix|update|changelog|release notes|version\\s+[0-9]|maintenance|fixes", item.title or "", re.I))
-
-
-def is_english_news(item) -> bool:
-    import re
-    # Steam does not consistently label the language of aggregated news feeds.
-    text = (item.title or "") + " " + (item.contents or "")[:350]
-    return not bool(re.search(r"[\\u0400-\\u052f\\u0600-\\u06ff\\u4e00-\\u9fff\\u3040-\\u30ff\\uac00-\\ud7af]", text))
+    title = item.title or ""
+    return bool(re.search(
+        r"patch\\s*notes?|hot\\s*fix|updates?|changelog|release notes|"
+        r"version\\s*[0-9]|v[0-9]+(?:\\.[0-9]+)+|maintenance|bug\\s*fix|"
+        r"new\\s*patch|game\\s*fixes|technical\\s*update",
+        title, re.I,
+    ))
 
 
 @bot.tree.command(name="steam", description="Show Steam store info: price, reviews, release date and more.")
@@ -665,8 +673,7 @@ async def news_command(
             raise news_exc
         name = (app.name if app else None) or resolved.name or services.known_name(resolved.appid) or f"Steam App {resolved.appid}"
         english = [item for item in (items or []) if is_english_news(item)]
-        official = [item for item in english if item.feedname == "steam_community_announcements"]
-        selected = (official or english)[:options(interaction)["news_count"]]
+        selected = english[:options(interaction)["news_count"]]
         await send_embed(interaction, embeds.build_news_embed(name, resolved.appid, selected))
 
     await run_lookup(interaction, f"/news game={game!r} appid={appid}", handler, public=public_response(interaction, visibility))
