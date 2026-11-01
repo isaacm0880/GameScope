@@ -56,7 +56,7 @@ NEWS_URL = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
 PROTONDB_SUMMARY_URL = "https://www.protondb.com/api/v1/reports/summaries/{appid}.json"
 PROTONDB_COUNTS_URL = "https://www.protondb.com/data/counts.json"
 PROTONDB_REPORTS_URL = "https://www.protondb.com/data/reports/all-devices/app/{hash}.json"
-PROTON_PULSE_REPORTS_URL = "https://www.proton-pulse.com/data/{appid}/latest.json"
+PROTON_PULSE_REPORTS_URL = "https://data.proton-pulse.com/data/{appid}/latest.json"
 
 MAX_CONCURRENT_REQUESTS = 8
 
@@ -354,7 +354,7 @@ class GameServices:
                     log.info("Using Proton Pulse report mirror for Steam app %s", appid)
                     return ReportsResult(reports=reports[:limit], ok=True,
                                          reason="Proton Pulse mirror")
-                return ReportsResult(ok=True, reports=[])
+                return primary if not primary.ok else ReportsResult(ok=True, reports=[])
         except (UpstreamError, BadResponse) as exc:
             log.warning("Proton Pulse mirror unavailable for app %s: %s", appid, exc)
         except Exception:
