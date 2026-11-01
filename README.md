@@ -43,8 +43,6 @@ Examples:
 
 Use the dropdown on the result to switch views without issuing another command. The Steam view provides **Requirements**, **Reviews**, and **News** buttons. News opens privately.
 
-The previous `/steam`, `/protondb`, and `/news` slash commands have been replaced by `/game`.
-
 ### `/settings`
 
 Configure the bot through an interactive Discord menu.
@@ -58,7 +56,7 @@ Configure the bot through an interactive Discord menu.
 
 **Permissions:** Users with Discord's **Administrator** permission can access settings by default. Administrators can add up to ten additional roles to grant settings access; clearing the role selection restores administrator-only access. Only administrators can grant roles settings access.
 
-**Presence is global:** Administrators and authorised settings roles in any server using this bot can change it for all servers. Unlike server-specific settings, changing the bot's presence affects its appearance in every server where the same bot account is installed. Users authorised to access settings can change it.
+**Presence is global:** Administrators and authorised settings roles in any server using the bot can change its presence for all servers.
 
 ## Self-hosting with Docker
 
@@ -90,13 +88,11 @@ LOG_LEVEL=INFO
 
 `DISCORD_GUILD_ID` is optional: specify a test server ID for faster development command sync, or leave blank for global commands. `HTTP_TIMEOUT_SECONDS` is also supported (default: `12`).
 
-**No owner ID or presence configuration is required in `.env`.** Presence and permissions are managed through `/settings`.
-
 ### 3. Invite the bot
 
 In the [Discord Developer Portal](https://discord.com/developers/applications), create or open your application and invite it with the `bot` and `applications.commands` scopes.
 
-Recommended bot permissions: **View Channels**, **Send Messages**, and **Embed Links**. The bot does not need the Administrator permission or the Message Content privileged intent.
+Required bot permissions: **View Channels**, **Send Messages**, and **Embed Links**.
 
 ### 4. Build and start (first installation)
 
@@ -104,17 +100,13 @@ Recommended bot permissions: **View Channels**, **Send Messages**, and **Embed L
 docker compose up -d --build
 ```
 
-This builds the image and starts GameScope in the background. The `-d` option keeps it running after you close the terminal or SSH session.
-
 ### Normal startup
-
-After the image has been built, start GameScope without rebuilding:
 
 ```bash
 docker compose up -d
 ```
 
-To view live logs without stopping the bot when you press Ctrl+C:
+To view logs:
 
 ```bash
 docker compose logs -f
@@ -122,18 +114,10 @@ docker compose logs -f
 
 ### Updating the bot
 
-After pulling new code, rebuild the image to include the changes:
-
 ```bash
 git pull --ff-only
 docker compose up -d --build
 ```
-
-You only need `--build` for the initial build or when rebuilding after code, dependency or Dockerfile changes. Ordinary restarts do not require it.
-
-To stop GameScope, run `docker compose down` (without `-v` to keep settings).
-
-The named Docker volume `gamescope-settings` stores SQLite settings across container rebuilds. Existing installations using the old `protondb-settings` volume must migrate the SQLite database before switching to this Compose configuration. Do not remove the volume if you want to keep your configuration.
 
 ## Troubleshooting
 
@@ -142,7 +126,6 @@ The named Docker volume `gamescope-settings` stores SQLite settings across conta
 - **Settings unavailable:** Only server administrators and roles granted settings access can open `/settings`.
 - **Presence changes fail:** Check container logs. Presence updates require an active Discord gateway connection.
 - **Missing game information or updates:** Steam and ProtonDB may have incomplete data or rate limits. The update detector is heuristic and may not identify every patch.
-- **SQLite permission errors:** Ensure the Docker volume mounted at `/data` is writable by the container user.
 
 ## Contributing
 
