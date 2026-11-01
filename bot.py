@@ -81,6 +81,7 @@ async def send_embed(
     kwargs: dict[str, Any] = {"embed": embed, "ephemeral": ephemeral, "allowed_mentions": NO_MENTIONS}
     if view is not None:
         kwargs["view"] = view
+    kwargs["embed"] = customise(interaction, embed)
     await interaction.followup.send(**kwargs)
 
 
@@ -124,6 +125,10 @@ async def run_lookup(
     public: bool,
 ) -> None:
     """Defer immediately, run ``handler`` and turn any failure into a private error embed."""
+    allowed = options(interaction)["allowed_channels"]
+    if allowed and interaction.channel_id not in allowed:
+        await interaction.response.send_message("This bot is restricted to other channels.", ephemeral=True)
+        return
     if not await safe_defer(interaction, ephemeral=not public):
         return
     try:
@@ -335,6 +340,162 @@ bot = ProtonDBBot(
 )
 
 
+from settings_store import SettingsStore
+
+settings = SettingsStore()
+VISIBILITY_CHOICES = [
+    app_commands.Choice(name="Public", value="Public"),
+    app_commands.Choice(name="Private", value="Private"),
+]
+
+def options(interaction):
+    return settings.get(interaction.guild_id)
+
+def public_response(interaction, visibility):
+    return (visibility or options(interaction)["visibility"]) == "Public"
+
+def moderator(interaction):
+    if not interaction.guild or not isinstance(interaction.user, discord.Member):
+        return False
+    p = interaction.user.guild_permissions
+    role = options(interaction)["moderator_role"]
+    return p.administrator or p.manage_guild or p.manage_messages or (
+        role is not None and any(r.id == role for r in interaction.user.roles)
+    )
+
+def customise(interaction, embed, appid=None):
+    o = options(interaction)
+    embed.colour = discord.Colour(int(o["colour"][1:], 16))
+    if appid is not None:
+        links = []
+        if o["steamdb_link"]:
+            links.append(f"[SteamDB](https://steamdb.info/app/{appid}/)")
+        if o["pcgamingwiki_link"]:
+            links.append("[PCGamingWiki](https://www.pcgamingwiki.com/)")
+        if links and len(embed.fields) < 25:
+            embed.add_field(name="Other resources", value=" · ".join(links), inline=False)
+    return embeds.enforce_limits(embed)
+
+
+class SettingsMenu(discord.ui.View):
+    def __init__(self, guild_id, user_id):
+        super().__init__(timeout=600)
+        self.guild_id, self.user_id = guild_id, user_id
+
+    async def interaction_check(self, interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.user_id or not moderator(interaction):
+            await interaction.response.send_message("Only the moderator who opened this menu can change settings.", ephemeral=True)
+            return False
+        return True
+
+    def render(self):
+        o = settings.get(self.guild_id)
+        e = discord.Embed(title="Bot settings", description="Server-wide settings · moderator access", colour=int(o["colour"][1:], 16))
+        e.add_field(name="General", value=f'Default visibility: **{o["visibility"]}**\nColour: **{o["colour"]}**\nNews items: **{o["news_count"]}**', inline=False)
+        e.add_field(name="Embed features", value="\n".join(f'{k}: **{"Enabled" if o[k] else "Disabled"}**' for k in ("steamdeck", "anticheat", "pcgamingwiki_link", "steamdb_link")), inline=False)
+        e.add_field(name="Reports", value=f'Count: **{o["report_count"]}**\nNewest first: **{o["newest_first"]}**', inline=False)
+        e.add_field(name="Access", value=f'Moderator role: **{o["moderator_role"] or "None"}**\nAllowed channels: **{", ".join(map(str, o["allowed_channels"])) or "All"}**', inline=False)
+        return e
+
+    @discord.ui.button(label="Visibility", style=discord.ButtonStyle.primary)
+    async def visibility(self, interaction, button):
+        o = settings.get(self.guild_id)
+        settings.update(self.guild_id, visibility="Private" if o["visibility"] == "Public" else "Public")
+        await interaction.response.edit_message(embed=self.render(), view=self)
+
+    @discord.ui.button(label="Embed features", style=discord.ButtonStyle.secondary)
+    async def embed_features(self, interaction, button):
+        await interaction.response.send_message("Choose a feature to toggle:", view=FeatureMenu(self.guild_id, self.user_id), ephemeral=True)
+
+    @discord.ui.button(label="Reports / news", style=discord.ButtonStyle.secondary)
+    async def counts(self, interaction, button):
+        await interaction.response.send_message("Choose a setting:", view=CountMenu(self.guild_id, self.user_id), ephemeral=True)
+
+    @discord.ui.button(label="Access", style=discord.ButtonStyle.secondary)
+    async def access(self, interaction, button):
+        await interaction.response.send_message("Select a moderator role or allowed channels. Clear the selection to reset.", view=AccessMenu(self.guild_id, self.user_id), ephemeral=True)
+
+    @discord.ui.button(label="Colour", style=discord.ButtonStyle.secondary)
+    async def colour(self, interaction, button):
+        await interaction.response.send_modal(ColourModal(self.guild_id))
+
+
+class SubMenu(discord.ui.View):
+    def __init__(self, guild_id, user_id):
+        super().__init__(timeout=300)
+        self.guild_id, self.user_id = guild_id, user_id
+
+    async def interaction_check(self, interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.user_id or not moderator(interaction):
+            await interaction.response.send_message("Not authorised.", ephemeral=True)
+            return False
+        return True
+
+    async def save(self, interaction, **changes):
+        settings.update(self.guild_id, **changes)
+        await interaction.response.edit_message(content="Saved. Reopen /settings to see the updated overview.", view=None)
+
+
+class FeatureMenu(SubMenu):
+    @discord.ui.select(placeholder="Toggle a feature", options=[
+        discord.SelectOption(label="Steam Deck status", value="steamdeck"),
+        discord.SelectOption(label="Anti-cheat status", value="anticheat"),
+        discord.SelectOption(label="PCGamingWiki links", value="pcgamingwiki_link"),
+        discord.SelectOption(label="SteamDB links", value="steamdb_link"),
+    ])
+    async def choose(self, interaction, select):
+        key = select.values[0]
+        await self.save(interaction, **{key: not settings.get(self.guild_id)[key]})
+
+
+class CountMenu(SubMenu):
+    @discord.ui.select(placeholder="Choose a count or report order", options=[
+        discord.SelectOption(label=f"Reports: {n}", value=f"report_count:{n}") for n in (3, 5, 10)
+    ] + [
+        discord.SelectOption(label=f"News: {n}", value=f"news_count:{n}") for n in (3, 5, 10)
+    ] + [discord.SelectOption(label="Toggle newest-first reports", value="newest_first:toggle")])
+    async def choose(self, interaction, select):
+        key, value = select.values[0].split(":")
+        await self.save(interaction, **{key: not settings.get(self.guild_id)[key] if value == "toggle" else int(value)})
+
+
+class AccessMenu(SubMenu):
+    @discord.ui.select(cls=discord.ui.RoleSelect, placeholder="Moderator role (optional)", min_values=0, max_values=1)
+    async def choose_role(self, interaction, select):
+        await self.save(interaction, moderator_role=select.values[0].id if select.values else None)
+
+    @discord.ui.select(cls=discord.ui.ChannelSelect, placeholder="Allowed channels (none = unrestricted)", min_values=0, max_values=10)
+    async def choose_channels(self, interaction, select):
+        await self.save(interaction, allowed_channels=[c.id for c in select.values])
+
+
+class ColourModal(discord.ui.Modal, title="Embed colour"):
+    colour = discord.ui.TextInput(label="Hex colour", placeholder="#B45D1F", min_length=6, max_length=7)
+
+    def __init__(self, guild_id):
+        super().__init__()
+        self.guild_id = guild_id
+
+    async def on_submit(self, interaction):
+        import re
+        value = str(self.colour.value).strip()
+        if not re.fullmatch(r"#?[0-9a-fA-F]{6}", value):
+            await interaction.response.send_message("Enter a valid six-digit hex colour.", ephemeral=True)
+            return
+        settings.update(self.guild_id, colour="#" + value.lstrip("#").upper())
+        await interaction.response.send_message("Colour saved.", ephemeral=True)
+
+
+@bot.tree.command(name="settings", description="Configure server-wide bot settings (moderators only).")
+@app_commands.guild_only()
+async def settings_command(interaction: discord.Interaction):
+    if not moderator(interaction):
+        await interaction.response.send_message("Only moderators can change bot settings.", ephemeral=True)
+        return
+    menu = SettingsMenu(interaction.guild_id, interaction.user.id)
+    await interaction.response.send_message(embed=menu.render(), view=menu, ephemeral=True)
+
+
 @bot.event
 async def on_ready() -> None:
     log.info("Logged in as %s (%s)", bot.user, bot.user.id if bot.user else "?")
@@ -367,7 +528,7 @@ async def show_protondb(interaction: discord.Interaction, resolved: ResolvedGame
     (app, _app_exc), (summary, summary_exc), reports = await asyncio.gather(
         capture(services.steam_app(appid)),
         capture(services.protondb_summary(appid)),
-        services.protondb_reports(appid),
+        services.protondb_reports(appid, limit=options(interaction)["report_count"]),
     )
     if app is None and _app_exc is None and summary is None and summary_exc is None:
         await send_error(
@@ -379,23 +540,25 @@ async def show_protondb(interaction: discord.Interaction, resolved: ResolvedGame
         return
     name = (app.name if app else None) or resolved.name or services.known_name(appid) or f"Steam App {appid}"
     embed = embeds.build_protondb_embed(appid, name, summary, short_reason(summary_exc), reports, app)
-    await send_embed(interaction, embed)
+    await send_embed(interaction, customise(interaction, embed, appid))
 
 
 @bot.tree.command(name="protondb", description="Check a game's Linux compatibility on ProtonDB.")
-@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID")
+@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID", visibility="Public or private response")
+@app_commands.choices(visibility=VISIBILITY_CHOICES)
 @app_commands.autocomplete(game=game_autocomplete)
 async def protondb_command(
     interaction: discord.Interaction,
     game: str | None = None,
     appid: app_commands.Range[int, 1, 999999999] | None = None,
+    visibility: str | None = None,
 ) -> None:
     async def handler() -> None:
         resolved = await resolve_input(interaction, game, appid)
         if resolved:
             await show_protondb(interaction, resolved)
 
-    await run_lookup(interaction, f"/protondb game={game!r} appid={appid}", handler, public=True)
+    await run_lookup(interaction, f"/protondb game={game!r} appid={appid}", handler, public=public_response(interaction, visibility))
 
 
 # ---------------------------------------------------------------------------
@@ -418,35 +581,39 @@ async def show_steam(interaction: discord.Interaction, resolved: ResolvedGame) -
         )
         return
     embed = embeds.build_steam_embed(app, summary, reviews_unavailable=summary_exc is not None)
-    await send_embed(interaction, embed, view=steam_buttons_view(app.appid))
+    await send_embed(interaction, customise(interaction, embed, app.appid), view=steam_buttons_view(app.appid))
 
 
 @bot.tree.command(name="steam", description="Show Steam store info: price, reviews, release date and more.")
-@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID")
+@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID", visibility="Public or private response")
+@app_commands.choices(visibility=VISIBILITY_CHOICES)
 @app_commands.autocomplete(game=game_autocomplete)
 async def steam_command(
     interaction: discord.Interaction,
     game: str | None = None,
     appid: app_commands.Range[int, 1, 999999999] | None = None,
+    visibility: str | None = None,
 ) -> None:
     async def handler() -> None:
         resolved = await resolve_input(interaction, game, appid)
         if resolved:
             await show_steam(interaction, resolved)
 
-    await run_lookup(interaction, f"/steam game={game!r} appid={appid}", handler, public=True)
+    await run_lookup(interaction, f"/steam game={game!r} appid={appid}", handler, public=public_response(interaction, visibility))
 
 
 # ---------------------------------------------------------------------------
 # /news
 # ---------------------------------------------------------------------------
 @bot.tree.command(name="news", description="Show recent Steam announcements and news for a game.")
-@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID")
+@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID", visibility="Public or private response")
+@app_commands.choices(visibility=VISIBILITY_CHOICES)
 @app_commands.autocomplete(game=game_autocomplete)
 async def news_command(
     interaction: discord.Interaction,
     game: str | None = None,
     appid: app_commands.Range[int, 1, 999999999] | None = None,
+    visibility: str | None = None,
 ) -> None:
     async def handler() -> None:
         resolved = await resolve_input(interaction, game, appid)
@@ -454,14 +621,14 @@ async def news_command(
             return
         (app, _app_exc), (items, news_exc) = await asyncio.gather(
             capture(services.steam_app(resolved.appid)),
-            capture(services.news(resolved.appid)),
+            capture(services.news(resolved.appid, count=options(interaction)["news_count"])),
         )
         if news_exc is not None:
             raise news_exc
         name = (app.name if app else None) or resolved.name or services.known_name(resolved.appid) or f"Steam App {resolved.appid}"
         await send_embed(interaction, embeds.build_news_embed(name, resolved.appid, items or []))
 
-    await run_lookup(interaction, f"/news game={game!r} appid={appid}", handler, public=True)
+    await run_lookup(interaction, f"/news game={game!r} appid={appid}", handler, public=public_response(interaction, visibility))
 
 
 def main() -> None:
