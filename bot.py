@@ -1,7 +1,7 @@
 """ProtonDB / Steam Discord bot - entry point.
 
-Commands: /protondb, /protondbid, /steam (with Requirements and Reviews
-buttons) and /news. HTTP access lives in services.py, embed construction in
+Commands: /protondb, /steam (with Requirements and Reviews buttons), and /news.
+Each command accepts a game name or Steam App ID. HTTP access lives in services.py, embed construction in
 embeds.py, parsing in parsers.py.
 """
 from __future__ import annotations
@@ -154,6 +154,25 @@ async def need_game(interaction: discord.Interaction, query: str) -> ResolvedGam
             was_public=True,
         )
     return resolved
+
+
+async def resolve_input(
+    interaction: discord.Interaction,
+    game: str | None,
+    appid: int | None,
+) -> ResolvedGame | None:
+    """Prefer an explicit App ID; otherwise resolve the supplied game name."""
+    if appid is not None:
+        return ResolvedGame(appid, services.known_name(appid))
+    if game and game.strip():
+        return await need_game(interaction, game)
+    await send_error(
+        interaction,
+        "Provide either a game name or a Steam App ID.",
+        title="Missing game",
+        was_public=True,
+    )
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -364,26 +383,19 @@ async def show_protondb(interaction: discord.Interaction, resolved: ResolvedGame
 
 
 @bot.tree.command(name="protondb", description="Check a game's Linux compatibility on ProtonDB.")
-@app_commands.describe(game="Start typing a game name and select a result.")
+@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID")
 @app_commands.autocomplete(game=game_autocomplete)
-async def protondb_command(interaction: discord.Interaction, game: str) -> None:
+async def protondb_command(
+    interaction: discord.Interaction,
+    game: str | None = None,
+    appid: app_commands.Range[int, 1, 999999999] | None = None,
+) -> None:
     async def handler() -> None:
-        resolved = await need_game(interaction, game)
+        resolved = await resolve_input(interaction, game, appid)
         if resolved:
             await show_protondb(interaction, resolved)
 
-    await run_lookup(interaction, f"/protondb {game!r}", handler, public=True)
-
-
-@bot.tree.command(name="protondbid", description="Check Linux compatibility by Steam App ID.")
-@app_commands.describe(appid="Numeric Steam App ID")
-async def protondbid_command(
-    interaction: discord.Interaction, appid: app_commands.Range[int, 1, 999999999]
-) -> None:
-    async def handler() -> None:
-        await show_protondb(interaction, ResolvedGame(int(appid), services.known_name(int(appid))))
-
-    await run_lookup(interaction, f"/protondbid {appid}", handler, public=True)
+    await run_lookup(interaction, f"/protondb game={game!r} appid={appid}", handler, public=True)
 
 
 # ---------------------------------------------------------------------------
@@ -410,37 +422,34 @@ async def show_steam(interaction: discord.Interaction, resolved: ResolvedGame) -
 
 
 @bot.tree.command(name="steam", description="Show Steam store info: price, reviews, release date and more.")
-@app_commands.describe(game="Start typing a game name and select a result.")
+@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID")
 @app_commands.autocomplete(game=game_autocomplete)
-async def steam_command(interaction: discord.Interaction, game: str) -> None:
+async def steam_command(
+    interaction: discord.Interaction,
+    game: str | None = None,
+    appid: app_commands.Range[int, 1, 999999999] | None = None,
+) -> None:
     async def handler() -> None:
-        resolved = await need_game(interaction, game)
+        resolved = await resolve_input(interaction, game, appid)
         if resolved:
             await show_steam(interaction, resolved)
 
-    await run_lookup(interaction, f"/steam {game!r}", handler, public=True)
-
-
-@bot.tree.command(name="steamid", description="Show Steam store information by numeric App ID.")
-@app_commands.describe(appid="Numeric Steam App ID")
-async def steamid_command(
-    interaction: discord.Interaction, appid: app_commands.Range[int, 1, 999999999]
-) -> None:
-    async def handler() -> None:
-        await show_steam(interaction, ResolvedGame(int(appid), services.known_name(int(appid))))
-
-    await run_lookup(interaction, f"/steamid {appid}", handler, public=True)
+    await run_lookup(interaction, f"/steam game={game!r} appid={appid}", handler, public=True)
 
 
 # ---------------------------------------------------------------------------
 # /news
 # ---------------------------------------------------------------------------
 @bot.tree.command(name="news", description="Show recent Steam announcements and news for a game.")
-@app_commands.describe(game="Start typing a game name and select a result.")
+@app_commands.describe(game="Search by game name", appid="Or enter a numeric Steam App ID")
 @app_commands.autocomplete(game=game_autocomplete)
-async def news_command(interaction: discord.Interaction, game: str) -> None:
+async def news_command(
+    interaction: discord.Interaction,
+    game: str | None = None,
+    appid: app_commands.Range[int, 1, 999999999] | None = None,
+) -> None:
     async def handler() -> None:
-        resolved = await need_game(interaction, game)
+        resolved = await resolve_input(interaction, game, appid)
         if not resolved:
             return
         (app, _app_exc), (items, news_exc) = await asyncio.gather(
@@ -452,7 +461,7 @@ async def news_command(interaction: discord.Interaction, game: str) -> None:
         name = (app.name if app else None) or resolved.name or services.known_name(resolved.appid) or f"Steam App {resolved.appid}"
         await send_embed(interaction, embeds.build_news_embed(name, resolved.appid, items or []))
 
-    await run_lookup(interaction, f"/news {game!r}", handler, public=True)
+    await run_lookup(interaction, f"/news game={game!r} appid={appid}", handler, public=True)
 
 
 def main() -> None:
