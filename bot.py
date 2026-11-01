@@ -389,33 +389,47 @@ async def protondbid_command(
 # ---------------------------------------------------------------------------
 # /steam
 # ---------------------------------------------------------------------------
+async def show_steam(interaction: discord.Interaction, resolved: ResolvedGame) -> None:
+    (app, app_exc), (summary, summary_exc) = await asyncio.gather(
+        capture(services.steam_app(resolved.appid)),
+        capture(services.review_summary(resolved.appid)),
+    )
+    if app_exc is not None:
+        raise app_exc
+    if app is None:
+        await send_error(
+            interaction,
+            f"Steam has no store data for App ID `{resolved.appid}`. It may be delisted, "
+            "region-restricted or not a store item.",
+            title="No Steam data",
+            was_public=True,
+        )
+        return
+    embed = embeds.build_steam_embed(app, summary, reviews_unavailable=summary_exc is not None)
+    await send_embed(interaction, embed, view=steam_buttons_view(app.appid))
+
+
 @bot.tree.command(name="steam", description="Show Steam store info: price, reviews, release date and more.")
 @app_commands.describe(game="Start typing a game name and select a result.")
 @app_commands.autocomplete(game=game_autocomplete)
 async def steam_command(interaction: discord.Interaction, game: str) -> None:
     async def handler() -> None:
         resolved = await need_game(interaction, game)
-        if not resolved:
-            return
-        (app, app_exc), (summary, summary_exc) = await asyncio.gather(
-            capture(services.steam_app(resolved.appid)),
-            capture(services.review_summary(resolved.appid)),
-        )
-        if app_exc is not None:
-            raise app_exc
-        if app is None:
-            await send_error(
-                interaction,
-                f"Steam has no store data for App ID `{resolved.appid}`. It may be delisted, "
-                "region-restricted or not a store item.",
-                title="No Steam data",
-                was_public=True,
-            )
-            return
-        embed = embeds.build_steam_embed(app, summary, reviews_unavailable=summary_exc is not None)
-        await send_embed(interaction, embed, view=steam_buttons_view(app.appid))
+        if resolved:
+            await show_steam(interaction, resolved)
 
     await run_lookup(interaction, f"/steam {game!r}", handler, public=True)
+
+
+@bot.tree.command(name="steamid", description="Show Steam store information by numeric App ID.")
+@app_commands.describe(appid="Numeric Steam App ID")
+async def steamid_command(
+    interaction: discord.Interaction, appid: app_commands.Range[int, 1, 999999999]
+) -> None:
+    async def handler() -> None:
+        await show_steam(interaction, ResolvedGame(int(appid), services.known_name(int(appid))))
+
+    await run_lookup(interaction, f"/steamid {appid}", handler, public=True)
 
 
 # ---------------------------------------------------------------------------
