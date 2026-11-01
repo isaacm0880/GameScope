@@ -618,11 +618,10 @@ class GameViewSelect(discord.ui.DynamicItem[discord.ui.Select], template=r"game:
 
     async def callback(self, interaction: discord.Interaction):
         selected = self.item.values[0]
-        if not await safe_defer(interaction):
-            return
+        await interaction.response.defer()
         try:
             embed = await build_game_embed(interaction, self.appid, selected)
-            await interaction.edit_original_response(embed=embed, view=game_view(self.appid, selected, options(interaction)))
+            await interaction.message.edit(embed=embed, view=game_view(self.appid, selected, options(interaction)))
         except Exception:
             log.exception("Failed switching game view")
             await interaction.followup.send("Couldn't switch the game view. Check the bot logs.", ephemeral=True)
