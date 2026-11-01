@@ -6,9 +6,8 @@ from pathlib import Path
 
 DEFAULTS = {
     "visibility": "Public", "colour": "#B45D1F", "report_count": 3,
-    "news_count": 5, "newest_first": True, "steamdeck": True,
-    "anticheat": True, "pcgamingwiki_link": True, "steamdb_link": True,
-    "moderator_role": None, "settings_roles": [], "allowed_channels": [],
+    "news_count": 5, "pcgamingwiki_link": True, "steamdb_link": True,
+    "settings_roles": [], "allowed_channels": [],
     "presence_status": "online", "presence_type": "watching", "presence_text": "/game", "presence_enabled": True,
 }
 
@@ -25,7 +24,7 @@ class SettingsStore:
             with sqlite3.connect(self.path) as db:
                 row = db.execute("SELECT value FROM settings WHERE guild=?", (guild,)).fetchone()
             if row:
-                value.update(json.loads(row[0]))
+                value.update({k: v for k, v in json.loads(row[0]).items() if k in DEFAULTS})
         return value
 
     def update(self, guild, **changes):

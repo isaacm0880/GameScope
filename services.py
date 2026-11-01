@@ -47,7 +47,7 @@ from parsers import (
 )
 from protondb_hash import ordered_variants, report_hash
 
-log = logging.getLogger("protondb-bot.services")
+log = logging.getLogger("gamescope.services")
 
 SEARCH_URL = "https://store.steampowered.com/api/storesearch/"
 APPDETAILS_URL = "https://store.steampowered.com/api/appdetails/"

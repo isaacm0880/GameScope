@@ -58,7 +58,7 @@ Configure the bot through an interactive Discord menu.
 
 **Permissions:** Users with Discord's **Administrator** permission can access settings by default. Administrators can add up to ten additional roles to grant settings access; clearing the role selection restores administrator-only access. Only administrators can grant roles settings access.
 
-**Presence is global:** Unlike server-specific settings, changing the bot's presence affects its appearance in every server where the same bot account is installed. Users authorised to access settings can change it.
+**Presence is global:** Administrators and authorised settings roles in any server using this bot can change it for all servers. Unlike server-specific settings, changing the bot's presence affects its appearance in every server where the same bot account is installed. Users authorised to access settings can change it.
 
 ## Self-hosting with Docker
 
@@ -112,7 +112,7 @@ git pull --ff-only
 docker compose up -d --build
 ```
 
-The named Docker volume stores SQLite settings across container rebuilds. Do not remove the volume if you want to keep your configuration.
+The named Docker volume `gamescope-settings` stores SQLite settings across container rebuilds. Existing installations using the old `protondb-settings` volume must migrate the SQLite database before switching to this Compose configuration. Do not remove the volume if you want to keep your configuration.
 
 ## Troubleshooting
 

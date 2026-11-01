@@ -67,3 +67,17 @@ def test_sqlite_database_has_one_row_per_guild(tmp_path):
     with sqlite3.connect(path) as db:
         guild_ids = [row[0] for row in db.execute("SELECT guild FROM settings ORDER BY guild")]
     assert guild_ids == [111, 222]
+
+
+def test_legacy_settings_are_ignored_without_losing_active_values(tmp_path):
+    import json
+    path = str(tmp_path / "settings.sqlite3")
+    store = SettingsStore(path)
+    with sqlite3.connect(path) as db:
+        db.execute("INSERT INTO settings (guild, value) VALUES (?, ?)",
+                   (123, json.dumps({"moderator_role": 1234, "steamdeck": True,
+                                     "anticheat": True, "newest_first": False,
+                                     "colour": "#123456"})))
+    result = store.get(123)
+    assert result["colour"] == "#123456"
+    assert all(key not in result for key in ("moderator_role", "steamdeck", "anticheat", "newest_first"))

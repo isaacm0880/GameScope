@@ -27,7 +27,7 @@ def _int_env(name: str, default: int, minimum: int = 0) -> int:
     try:
         return max(minimum, int(raw))
     except ValueError:
-        logging.getLogger("protondb-bot").warning(
+        logging.getLogger("gamescope").warning(
             "Ignoring invalid %s=%r; using %s", name, raw, default
         )
         return default
@@ -40,7 +40,7 @@ def _float_env(name: str, default: float, minimum: float = 1.0) -> float:
     try:
         return max(minimum, float(raw))
     except ValueError:
-        logging.getLogger("protondb-bot").warning(
+        logging.getLogger("gamescope").warning(
             "Ignoring invalid %s=%r; using %s", name, raw, default
         )
         return default
@@ -62,7 +62,7 @@ HTTP_TIMEOUT_SECONDS = _float_env("HTTP_TIMEOUT_SECONDS", 12.0)
 # Autocomplete must answer within Discord's 3 second limit.
 AUTOCOMPLETE_TIMEOUT_SECONDS = 2.5
 
-USER_AGENT = "ProtonDBDiscordBot/2.0 (Discord bot; community compatibility lookup)"
+USER_AGENT = "GameScope/1.0 (Discord bot; community compatibility lookup)"
 
 # Cache tuning (not user-facing)
 CACHE_MAX_ENTRIES = 1000
@@ -84,4 +84,4 @@ def configure_logging() -> logging.Logger:
         level=level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    return logging.getLogger("protondb-bot")
+    return logging.getLogger("gamescope")

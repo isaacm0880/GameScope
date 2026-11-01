@@ -1,8 +1,7 @@
-"""ProtonDB / Steam Discord bot - entry point.
+"""GameScope Discord bot entry point.
 
-Commands: /protondb, /steam (with Requirements and Reviews buttons), and /news.
-Each command accepts a game name or Steam App ID. HTTP access lives in services.py, embed construction in
-embeds.py, parsing in parsers.py.
+The /game command provides Steam and ProtonDB views; /settings configures the bot.
+HTTP access lives in services.py and embed construction in embeds.py.
 """
 from __future__ import annotations
 
@@ -184,7 +183,7 @@ async def resolve_input(
 
 
 # ---------------------------------------------------------------------------
-# shared autocomplete (used by /protondb, /steam and /news)
+# shared /game autocomplete
 # ---------------------------------------------------------------------------
 async def game_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     current = (current or "").strip()
@@ -214,7 +213,7 @@ async def game_autocomplete(interaction: discord.Interaction, current: str) -> l
 
 
 # ---------------------------------------------------------------------------
-# /steam buttons (stateless: the App ID lives in the custom_id, so they keep
+# /game buttons (stateless: the App ID lives in the custom_id, so they keep
 # working after a bot restart and each click sends a NEW private embed)
 # ---------------------------------------------------------------------------
 async def send_requirements(interaction: discord.Interaction, appid: int) -> None:
@@ -326,7 +325,7 @@ def steam_buttons_view(appid: int, opts: dict | None = None) -> discord.ui.View:
 # ---------------------------------------------------------------------------
 # bot
 # ---------------------------------------------------------------------------
-class ProtonDBBot(commands.Bot):
+class GameScopeBot(commands.Bot):
     async def setup_hook(self) -> None:
         await services.start()
         self.add_dynamic_items(RequirementsButton, ReviewsButton, GameViewSelect, GameNewsButton)
@@ -367,7 +366,7 @@ class ProtonDBBot(commands.Bot):
         await super().close()
 
 
-bot = ProtonDBBot(
+bot = GameScopeBot(
     command_prefix=commands.when_mentioned,
     intents=discord.Intents.default(),
     allowed_mentions=NO_MENTIONS,
@@ -408,7 +407,7 @@ class SettingsMenu(discord.ui.View):
 
     async def interaction_check(self, interaction):
         if interaction.guild_id != self.guild_id or interaction.user.id != self.user_id or not moderator(interaction):
-            await interaction.response.send_message("Only the moderator who opened this menu can change settings.", ephemeral=True)
+            await interaction.response.send_message("Only the authorised member who opened this menu can change settings.", ephemeral=True)
             return False
         return True
 
@@ -421,7 +420,7 @@ class SettingsMenu(discord.ui.View):
         for channel_id in o["allowed_channels"]:
             channel = guild.get_channel(channel_id) if guild else None
             channel_names.append("#" + discord.utils.escape_markdown(channel.name) if channel else f"Unknown channel ({channel_id})")
-        e = discord.Embed(title="GameScope settings", description="Server-wide settings · moderators only", colour=int(o["colour"][1:], 16))
+        e = discord.Embed(title="GameScope settings", description="Server-wide settings · Authorised Members Only", colour=int(o["colour"][1:], 16))
         e.add_field(name="Appearance", value=f'Default visibility: **{o["visibility"]}**\nEmbed colour: **{o["colour"]}**', inline=False)
         e.add_field(name="Game information", value=(
             f'ProtonDB reports: **{o["report_count"]}**\n'
@@ -448,7 +447,7 @@ class SettingsMenu(discord.ui.View):
 
     @discord.ui.button(label="Access", style=discord.ButtonStyle.secondary)
     async def access(self, interaction, button):
-        await interaction.response.send_message("Choose a moderator role or allowed channels. Clearing a selection resets it.", view=AccessMenu(self.guild_id, self.user_id), ephemeral=True)
+        await interaction.response.send_message("Choose an authorised settings role or allowed channels. Clearing a selection resets it.", view=AccessMenu(self.guild_id, self.user_id), ephemeral=True)
 
     @discord.ui.button(label="Bot presence", style=discord.ButtonStyle.secondary, row=1)
     async def presence(self, interaction, button):
@@ -514,7 +513,7 @@ class AccessMenu(SubMenu):
 
 def presence_embed():
     p = settings.get(0)
-    e = discord.Embed(title="GameScope presence", description="Global bot presence · settings permissions", colour=0xB45D1F)
+    e = discord.Embed(title="GameScope presence", description="Global bot presence · Authorised Members Only. Changes affect every server using this bot; administrators and authorised settings roles in any server can change it.", colour=0xB45D1F)
     e.add_field(name="Status", value=p["presence_status"].title(), inline=True)
     e.add_field(name="Activity", value=p["presence_type"].title() if p["presence_enabled"] else "Disabled", inline=True)
     e.add_field(name="Text", value=p["presence_text"] or "None", inline=False)
@@ -601,11 +600,11 @@ class ColourModal(discord.ui.Modal, title="Embed colour"):
         await interaction.response.send_message("Colour saved.", ephemeral=True)
 
 
-@bot.tree.command(name="settings", description="Configure server-wide bot settings (moderators only).")
+@bot.tree.command(name="settings", description="Configure server-wide bot settings (Authorised Members Only).")
 @app_commands.guild_only()
 async def settings_command(interaction: discord.Interaction):
     if not moderator(interaction):
-        await interaction.response.send_message("Only moderators can change bot settings.", ephemeral=True)
+        await interaction.response.send_message("Authorised Members Only.", ephemeral=True)
         return
     menu = SettingsMenu(interaction.guild_id, interaction.user.id)
     await interaction.response.send_message(embed=menu.render(), view=menu, ephemeral=True)
@@ -648,7 +647,7 @@ async def build_game_embed(interaction: discord.Interaction, appid: int, view_na
         (app, app_exc), (summary, summary_exc), (updates, _) = await asyncio.gather(
             capture(services.steam_app(appid)),
             capture(services.review_summary(appid)),
-            capture(services.news(appid, count=100)),
+            capture(services.news(appid, count=50)),
         )
         if app_exc:
             raise app_exc
@@ -676,14 +675,9 @@ async def build_game_embed(interaction: discord.Interaction, appid: int, view_na
     return customise(interaction, embed, appid)
 
 
-def is_english_news(item) -> bool:
-    import re
-    return not bool(re.search("[\\u0400-\\u052f\\u0600-\\u06ff\\u4e00-\\u9fff\\u3040-\\u30ff\\uac00-\\ud7af]", item.title or ""))
-
-
 def is_game_update(item) -> bool:
     import re
-    return is_english_news(item) and bool(re.search(
+    return bool(re.search(
         r"patch\\s*notes?|hot\\s*fix|updates?|changelog|release notes|version\\s*[0-9]|"
         r"v[0-9]+(?:\\.[0-9]+)+|maintenance|bug\\s*fix|game\\s*fixes",
         item.title or "", re.I,
@@ -693,13 +687,13 @@ def is_game_update(item) -> bool:
 async def send_game_news(interaction: discord.Interaction, appid: int):
     (app, _), (items, error) = await asyncio.gather(
         capture(services.steam_app(appid)),
-        capture(services.news(appid, count=max(50, options(interaction)["news_count"] * 10))),
+        capture(services.news(appid, count=50)),
     )
     if error:
         raise error
     name = (app.name if app else None) or services.known_name(appid) or f"Steam App {appid}"
-    english = [item for item in (items or []) if is_english_news(item)]
-    await send_embed(interaction, embeds.build_news_embed(name, appid, english[:options(interaction)["news_count"]]), ephemeral=True)
+    # Steam does not supply reliable per-article language metadata. Avoid rejecting valid titles.
+    await send_embed(interaction, embeds.build_news_embed(name, appid, (items or [])[:options(interaction)["news_count"]]), ephemeral=True)
 
 
 class GameViewSelect(discord.ui.DynamicItem[discord.ui.Select], template=r"game:view:(?P<appid>[0-9]+)"):
