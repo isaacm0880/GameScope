@@ -13,7 +13,7 @@ DEFAULTS = {
 
 class SettingsStore:
     def __init__(self, path=None):
-        self.path = path or os.getenv("SETTINGS_DB", "/data/settings.sqlite3")
+        self.path = path or os.getenv("SETTINGS_DB", "./data/settings.sqlite3")
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self.path) as db:
             db.execute("CREATE TABLE IF NOT EXISTS settings (guild INTEGER PRIMARY KEY, value TEXT NOT NULL)")
