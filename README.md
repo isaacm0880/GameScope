@@ -88,7 +88,7 @@ CACHE_SECONDS=900
 LOG_LEVEL=INFO
 ```
 
-`DISCORD_GUILD_ID` is optional: specify a test server ID for faster development command sync, or leave blank for global commands. `HTTP_TIMEOUT_SECONDS` is also supported (default: `12`).
+`DISCORD_GUILD_ID` is optional: specify a single server ID for faster command sync, which means others dont sync, or leave blank for global commands. For cases where you only run the bot in one server `HTTP_TIMEOUT_SECONDS` is also supported (default: `12`).
 
 ### 3. Invite the bot
 
