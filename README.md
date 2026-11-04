@@ -1,3 +1,5 @@
+<img width="128" height="128" alt="gamescope_lens_transparent" src="https://github.com/user-attachments/assets/cb7dae3e-291b-4875-8398-2591ee80ec7e" />
+
 # GameScope
 
 A Discord bot for **Steam game information, ProtonDB compatibility, reviews, requirements, and news**, with interactive views and configurable server settings.
