@@ -431,6 +431,16 @@ class SettingsMenu(discord.ui.View):
         e.add_field(name="Permissions", value=f'Settings access: **{role_name}**\nAllowed channels: **{", ".join(channel_names) or "All channels"}**', inline=False)
         return e
 
+    async def on_error(self, interaction, error, item):
+        log.error("Settings menu failed: %s", type(item).__name__, exc_info=(type(error), error, error.__traceback__))
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send("Setting failed. Check bot logs.", ephemeral=True)
+            else:
+                await interaction.response.send_message("Setting failed. Check bot logs.", ephemeral=True)
+        except discord.HTTPException:
+            log.exception("Could not report settings menu failure")
+
     @discord.ui.button(label="Visibility", style=discord.ButtonStyle.primary)
     async def visibility(self, interaction, button):
         o = settings.get(self.guild_id)
@@ -473,8 +483,21 @@ class SubMenu(discord.ui.View):
         return True
 
     async def save(self, interaction, **changes):
+        await interaction.response.defer()
         settings.update(self.guild_id, **changes)
-        await interaction.response.edit_message(content="Saved. Run `/settings` to see the updated overview.", view=None)
+        # Refresh the originating submenu so users can immediately see confirmation.
+        await interaction.edit_original_response(content="Setting saved. Run `/settings` for the updated overview.", view=None)
+
+    async def on_error(self, interaction, error, item):
+        log.error("Settings component failed: %s", type(item).__name__, exc_info=(type(error), error, error.__traceback__))
+        message = "Could not save that setting. Check the bot logs."
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except discord.HTTPException:
+            log.exception("Could not report settings failure")
 
 
 class FeatureMenu(SubMenu):
