@@ -53,10 +53,10 @@ def describe_upstream(exc: UpstreamError) -> str:
         wait = max(5, int(exc.retry_after))
         return f"{exc.service} is rate limiting requests right now. Please try again in about {wait} seconds."
     if isinstance(exc, UpstreamUnavailable):
-        return f"{exc.service} didn't respond properly. Please try again in a minute."
+        return f"{exc.service} didn't respond properly. Use `/ping` to check connectivity."
     if isinstance(exc, BadResponse):
-        return f"{exc.service} returned data in a format I didn't expect. Please try again later."
-    return "A game-data service is temporarily unavailable. Please try again shortly."
+        return f"{exc.service} returned unexpected data. Use `/ping` to check connectivity."
+    return "A game-data service is temporarily unavailable. Use `/ping` to check connectivity."
 
 
 async def safe_defer(interaction: discord.Interaction, *, ephemeral: bool = False) -> bool:
@@ -474,7 +474,7 @@ class SubMenu(discord.ui.View):
 
     async def save(self, interaction, **changes):
         settings.update(self.guild_id, **changes)
-        await interaction.response.edit_message(content="Saved. Reopen /settings to see the updated overview.", view=None)
+        await interaction.response.edit_message(content="Saved. Run `/settings` to see the updated overview.", view=None)
 
 
 class FeatureMenu(SubMenu):
@@ -598,6 +598,37 @@ class ColourModal(discord.ui.Modal, title="Embed colour"):
             return
         settings.update(self.guild_id, colour="#" + value.lstrip("#").upper())
         await interaction.response.send_message("Colour saved.", ephemeral=True)
+
+
+@bot.tree.command(name="ping", description="Check Steam and ProtonDB connectivity.")
+async def ping_command(interaction: discord.Interaction):
+    """Check upstream reachability from the bot server."""
+    import time
+    import aiohttp
+    if not await safe_defer(interaction, ephemeral=True):
+        return
+
+    async def probe(name: str, url: str) -> str:
+        started = time.monotonic()
+        try:
+            if services.session is None or services.session.closed:
+                return f"🔴 **{name}:** HTTP client unavailable"
+            async with services.session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as response:
+                elapsed = round((time.monotonic() - started) * 1000)
+                if response.status < 400:
+                    return f"🟢 **{name}:** Reachable ({elapsed} ms)"
+                return f"🔴 **{name}:** HTTP {response.status} ({elapsed} ms)"
+        except asyncio.TimeoutError:
+            return f"🔴 **{name}:** Timed out"
+        except aiohttp.ClientError as exc:
+            log.warning("Connectivity check failed for %s: %s", name, exc)
+            return f"🔴 **{name}:** Unreachable"
+
+    results = await asyncio.gather(
+        probe("Steam", "https://store.steampowered.com/api/appdetails?appids=620"),
+        probe("ProtonDB", "https://www.protondb.com/api/v1/reports/summaries/620.json"),
+    )
+    await interaction.followup.send("\n".join(results), ephemeral=True)
 
 
 @bot.tree.command(name="settings", description="Configure server-wide bot settings (Authorised Members Only).")
