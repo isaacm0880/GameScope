@@ -132,7 +132,12 @@ async def run_lookup(
     if not await safe_defer(interaction, ephemeral=not public):
         return
     try:
-        await handler()
+        # Discord follow-ups must complete within the interaction token lifetime.
+        # Bound upstream work so an unavailable service cannot leave a spinner indefinitely.
+        await asyncio.wait_for(handler(), timeout=25)
+    except asyncio.TimeoutError:
+        log.warning("%s timed out after 25 seconds", label)
+        await send_error(interaction, "Game information took too long to load. Use `/ping` to check Steam and ProtonDB connectivity.", was_public=public)
     except ValueError as exc:
         await send_error(interaction, str(exc), was_public=public)
     except UpstreamError as exc:
