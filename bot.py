@@ -414,8 +414,10 @@ class SettingsMenu(discord.ui.View):
 
     async def interaction_check(self, interaction):
         if interaction.guild_id != self.guild_id or interaction.user.id != self.user_id or not moderator(interaction):
+            log.warning("Settings interaction denied: guild=%s user=%s menu_guild=%s menu_user=%s", interaction.guild_id, interaction.user.id, self.guild_id, self.user_id)
             await interaction.response.send_message("Only the authorised member who opened this menu can change settings.", ephemeral=True)
             return False
+        log.info("Settings interaction accepted: guild=%s user=%s", interaction.guild_id, interaction.user.id)
         return True
 
     def render(self):
