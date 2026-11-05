@@ -358,6 +358,18 @@ class GameScopeBot(commands.Bot):
             else:
                 synced = await self.tree.sync()
                 where = "all servers (global)"
+                # Old guild-scoped registrations take precedence over global
+                # commands and can appear as duplicates. They must be cleared
+                # explicitly; syncing globals does not remove them.
+                for guild in self.guilds:
+                    try:
+                        stale = await self.tree.fetch_commands(guild=guild)
+                        if stale:
+                            self.tree.clear_commands(guild=guild)
+                            await self.tree.sync(guild=guild)
+                            log.info("Removed %s stale guild-scoped command(s) from %s", len(stale), guild.id)
+                    except discord.HTTPException:
+                        log.exception("Could not clean stale guild commands in %s", guild.id)
             names = ", ".join("/" + c.name for c in sorted(synced, key=lambda c: c.name))
             log.info("Synced %s slash command(s) to %s: %s", len(synced), where, names)
         except discord.Forbidden:
