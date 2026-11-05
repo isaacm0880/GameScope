@@ -331,6 +331,21 @@ class GameScopeBot(commands.Bot):
         self.add_dynamic_items(RequirementsButton, ReviewsButton, GameViewSelect, GameNewsButton)
         await self.sync_slash_commands()
 
+    async def cleanup_stale_guild_commands(self) -> None:
+        if config.GUILD_ID.isdigit() or getattr(self, "_guild_commands_cleaned", False):
+            return
+        for guild in self.guilds:
+            try:
+                stale = await self.tree.fetch_commands(guild=guild)
+                if stale:
+                    self.tree.clear_commands(guild=guild)
+                    await self.tree.sync(guild=guild)
+                    log.info("Removed %s stale guild-scoped command(s) from %s", len(stale), guild.id)
+            except discord.HTTPException:
+                log.exception("Could not clean stale guild commands in %s", guild.id)
+                return
+        self._guild_commands_cleaned = True
+
     async def apply_saved_presence(self):
         p = settings.get(0)
         status = getattr(discord.Status, p["presence_status"], discord.Status.online)
@@ -347,10 +362,21 @@ class GameScopeBot(commands.Bot):
                 guild = discord.Object(id=int(config.GUILD_ID))
                 self.tree.copy_global_to(guild=guild)
                 synced = await self.tree.sync(guild=guild)
+                # Global registrations from earlier deployments otherwise appear
+                # alongside guild-scoped commands in this server.
+                global_commands = await self.tree.fetch_commands()
+                if global_commands:
+                    self.tree.clear_commands(guild=None)
+                    await self.tree.sync()
+                    log.info("Removed %s stale global slash command(s) in guild-only mode", len(global_commands))
                 where = f"test guild {config.GUILD_ID}"
             else:
                 synced = await self.tree.sync()
                 where = "all servers (global)"
+                # Old guild-scoped registrations take precedence over global
+                # commands and can appear as duplicates. They must be cleared
+                # explicitly; syncing globals does not remove them.
+                # Guild cache is not populated during setup_hook; clean after READY.
             names = ", ".join("/" + c.name for c in sorted(synced, key=lambda c: c.name))
             log.info("Synced %s slash command(s) to %s: %s", len(synced), where, names)
         except discord.Forbidden:
@@ -407,8 +433,10 @@ class SettingsMenu(discord.ui.View):
 
     async def interaction_check(self, interaction):
         if interaction.guild_id != self.guild_id or interaction.user.id != self.user_id or not moderator(interaction):
+            log.warning("Settings interaction denied: guild=%s user=%s menu_guild=%s menu_user=%s", interaction.guild_id, interaction.user.id, self.guild_id, self.user_id)
             await interaction.response.send_message("Only the authorised member who opened this menu can change settings.", ephemeral=True)
             return False
+        log.info("Settings interaction accepted: guild=%s user=%s", interaction.guild_id, interaction.user.id)
         return True
 
     def render(self):
@@ -546,15 +574,28 @@ class PresenceMenu(SubMenu):
         return await super().interaction_check(interaction)
 
     async def save_presence(self, interaction, **changes):
+        # A component interaction must be acknowledged within three seconds.
+        # Update the menu immediately, then apply the gateway presence change.
         await interaction.response.defer()
         settings.update(0, **changes)
+        await interaction.edit_original_response(embed=presence_embed(), view=self)
         try:
-            await bot.apply_saved_presence()
+            await asyncio.wait_for(bot.apply_saved_presence(), timeout=5)
+        except asyncio.TimeoutError:
+            log.warning("Discord presence update timed out after saving %s", list(changes))
+            await interaction.followup.send(
+                "Setting saved, but Discord has not confirmed the presence update. It may appear shortly.",
+                ephemeral=True,
+            )
+            return
         except Exception:
             log.exception("Failed to apply presence settings")
-            await interaction.followup.send("Saved, but Discord could not apply the presence. Check logs.", ephemeral=True)
+            await interaction.followup.send(
+                "Setting saved, but Discord could not apply the presence. Check logs.",
+                ephemeral=True,
+            )
             return
-        await interaction.edit_original_response(embed=presence_embed(), view=self)
+        await interaction.followup.send("Presence updated successfully.", ephemeral=True)
 
     @discord.ui.select(placeholder="Bot status", options=[
         discord.SelectOption(label="Online", value="online"),
@@ -613,6 +654,7 @@ async def settings_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready() -> None:
     log.info("Logged in as %s (%s)", bot.user, bot.user.id if bot.user else "?")
+    await bot.cleanup_stale_guild_commands()
     try:
         await bot.apply_saved_presence()
     except Exception:
