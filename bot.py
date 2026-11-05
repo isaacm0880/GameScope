@@ -574,15 +574,28 @@ class PresenceMenu(SubMenu):
         return await super().interaction_check(interaction)
 
     async def save_presence(self, interaction, **changes):
+        # A component interaction must be acknowledged within three seconds.
+        # Update the menu immediately, then apply the gateway presence change.
         await interaction.response.defer()
         settings.update(0, **changes)
+        await interaction.edit_original_response(embed=presence_embed(), view=self)
         try:
-            await bot.apply_saved_presence()
+            await asyncio.wait_for(bot.apply_saved_presence(), timeout=5)
+        except asyncio.TimeoutError:
+            log.warning("Discord presence update timed out after saving %s", list(changes))
+            await interaction.followup.send(
+                "Setting saved, but Discord has not confirmed the presence update. It may appear shortly.",
+                ephemeral=True,
+            )
+            return
         except Exception:
             log.exception("Failed to apply presence settings")
-            await interaction.followup.send("Saved, but Discord could not apply the presence. Check logs.", ephemeral=True)
+            await interaction.followup.send(
+                "Setting saved, but Discord could not apply the presence. Check logs.",
+                ephemeral=True,
+            )
             return
-        await interaction.edit_original_response(embed=presence_embed(), view=self)
+        await interaction.followup.send("Presence updated successfully.", ephemeral=True)
 
     @discord.ui.select(placeholder="Bot status", options=[
         discord.SelectOption(label="Online", value="online"),
