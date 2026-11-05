@@ -331,6 +331,21 @@ class GameScopeBot(commands.Bot):
         self.add_dynamic_items(RequirementsButton, ReviewsButton, GameViewSelect, GameNewsButton)
         await self.sync_slash_commands()
 
+    async def cleanup_stale_guild_commands(self) -> None:
+        if config.GUILD_ID.isdigit() or getattr(self, "_guild_commands_cleaned", False):
+            return
+        for guild in self.guilds:
+            try:
+                stale = await self.tree.fetch_commands(guild=guild)
+                if stale:
+                    self.tree.clear_commands(guild=guild)
+                    await self.tree.sync(guild=guild)
+                    log.info("Removed %s stale guild-scoped command(s) from %s", len(stale), guild.id)
+            except discord.HTTPException:
+                log.exception("Could not clean stale guild commands in %s", guild.id)
+                return
+        self._guild_commands_cleaned = True
+
     async def apply_saved_presence(self):
         p = settings.get(0)
         status = getattr(discord.Status, p["presence_status"], discord.Status.online)
@@ -361,15 +376,7 @@ class GameScopeBot(commands.Bot):
                 # Old guild-scoped registrations take precedence over global
                 # commands and can appear as duplicates. They must be cleared
                 # explicitly; syncing globals does not remove them.
-                for guild in self.guilds:
-                    try:
-                        stale = await self.tree.fetch_commands(guild=guild)
-                        if stale:
-                            self.tree.clear_commands(guild=guild)
-                            await self.tree.sync(guild=guild)
-                            log.info("Removed %s stale guild-scoped command(s) from %s", len(stale), guild.id)
-                    except discord.HTTPException:
-                        log.exception("Could not clean stale guild commands in %s", guild.id)
+                # Guild cache is not populated during setup_hook; clean after READY.
             names = ", ".join("/" + c.name for c in sorted(synced, key=lambda c: c.name))
             log.info("Synced %s slash command(s) to %s: %s", len(synced), where, names)
         except discord.Forbidden:
@@ -634,6 +641,7 @@ async def settings_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready() -> None:
     log.info("Logged in as %s (%s)", bot.user, bot.user.id if bot.user else "?")
+    await bot.cleanup_stale_guild_commands()
     try:
         await bot.apply_saved_presence()
     except Exception:
