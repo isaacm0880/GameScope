@@ -347,6 +347,13 @@ class GameScopeBot(commands.Bot):
                 guild = discord.Object(id=int(config.GUILD_ID))
                 self.tree.copy_global_to(guild=guild)
                 synced = await self.tree.sync(guild=guild)
+                # Global registrations from earlier deployments otherwise appear
+                # alongside guild-scoped commands in this server.
+                global_commands = await self.tree.fetch_commands()
+                if global_commands:
+                    self.tree.clear_commands(guild=None)
+                    await self.tree.sync()
+                    log.info("Removed %s stale global slash command(s) in guild-only mode", len(global_commands))
                 where = f"test guild {config.GUILD_ID}"
             else:
                 synced = await self.tree.sync()
