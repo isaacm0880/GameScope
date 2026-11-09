@@ -11,7 +11,7 @@ import bot as B
 class Registration(unittest.TestCase):
     def test_current_slash_commands(self):
         commands = {command.name: command for command in B.bot.tree.get_commands()}
-        self.assertEqual(set(commands), {"game", "settings"})
+        self.assertEqual(set(commands), {"game", "ping", "settings"})
         self.assertTrue(all(len(command.description) <= 100 for command in commands.values()))
 
     def test_game_autocomplete_registered(self):
