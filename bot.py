@@ -642,6 +642,8 @@ class ColourModal(discord.ui.Modal, title="Embed colour"):
 
 
 @bot.tree.command(name="settings", description="Configure server-wide bot settings (Authorised Members Only).")
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.guild_only()
 async def settings_command(interaction: discord.Interaction):
     if not moderator(interaction):
@@ -793,6 +795,8 @@ def game_view(appid: int, selected: str, opts: dict) -> discord.ui.View:
 
 
 @bot.tree.command(name="game", description="Look up a game on ProtonDB or Steam.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.describe(game="Game name or Steam App ID (required)", view="Choose ProtonDB or Steam", visibility="Public or private response")
 @app_commands.choices(
     view=[
